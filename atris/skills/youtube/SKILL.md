@@ -1,7 +1,7 @@
 ---
 name: youtube
 description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 use printed rows if any; else the CLI retries once, then cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.18.1
+version: 2.18.2
 tags:
   - youtube
   - research
@@ -36,6 +36,7 @@ search QUERY (free)
     |                 --save files brief + pack-named apply when notes have a number or named mechanism; a multi-url --save batch proves the first saved pack the same way single-url --save does; thin --save refuses
     |                 playlist expand keeps printed yt-dlp rows on 429
     |            or teach URL [--section N] (one chapter: claim numbers, named mechanisms, one check; free unless --save)
+    |                 printed yt-dlp metadata is a hit even on 429
     |                 a taught section that is not last prints next: recap TEXT or skip
     |                 last section: rich ephemeral apply, failing check, and score 0, then next: atris youtube watch tick; save pack keep stays; no recap next
     |                 next --section refuses until recap/skip
@@ -274,6 +275,7 @@ Two layers, never mixed. The reply the person reads is flowing prose: ideas, spe
 | `502` | Transcript or cloud processing failed | Retry; credits auto-refunded when backend fails |
 | search exit 2 | ytsearch/yt-dlp missing or no results | Install yt-dlp, or put ytsearch on PATH |
 | search 429 | YouTube rate-limited local search | use printed rows if any; else CLI already retried; use cached rows if printed; if the rate-limit sentence prints, STOP; do not use --paid |
+| teach 429 | YouTube rate-limited local metadata | use printed yt-dlp JSON if it parses; empty or broken stdout still fails; do not use process as a fallback |
 
 ---
 

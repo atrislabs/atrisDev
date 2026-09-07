@@ -406,6 +406,17 @@ function parseCaptionText(raw) {
   return segments.join(' ');
 }
 
+function parseYtDlpInfoJson(result) {
+  const raw = String((result && result.stdout) || '').trim();
+  if (!raw) return null;
+  try {
+    const info = JSON.parse(raw);
+    return info && typeof info === 'object' && !Array.isArray(info) ? info : null;
+  } catch {
+    return null;
+  }
+}
+
 async function extractLocalTranscript(youtubeUrl, deps = {}) {
   if (process.env.ATRIS_YOUTUBE_LOCAL_TRANSCRIPT === '0') return null;
   const runner = deps.spawnSync || spawnSync;
@@ -414,14 +425,8 @@ async function extractLocalTranscript(youtubeUrl, deps = {}) {
     timeout: 20000,
     maxBuffer: 10 * 1024 * 1024,
   });
-  if (result.error || result.status !== 0 || !result.stdout) return null;
-
-  let info;
-  try {
-    info = JSON.parse(result.stdout);
-  } catch {
-    return null;
-  }
+  const info = parseYtDlpInfoJson(result);
+  if (!info) return null;
 
   const selected = chooseCaptionTrack(info);
   if (!selected?.track?.url) return null;
@@ -3326,14 +3331,8 @@ async function extractTeachSource(youtubeUrl, deps = {}) {
     timeout: 20000,
     maxBuffer: 10 * 1024 * 1024,
   });
-  if (result.error || result.status !== 0 || !result.stdout) return null;
-
-  let info;
-  try {
-    info = JSON.parse(result.stdout);
-  } catch {
-    return null;
-  }
+  const info = parseYtDlpInfoJson(result);
+  if (!info) return null;
 
   const selected = chooseCaptionTrack(info);
   if (!selected?.track?.url) return null;
@@ -3539,6 +3538,7 @@ module.exports = {
   parseYoutubeArgs,
   buildYoutubePayload,
   extractLocalTranscript,
+  parseYtDlpInfoJson,
   processYoutube,
   shouldRetryWithLocalTranscript,
   formatYoutubeResult,
