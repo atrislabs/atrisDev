@@ -160,11 +160,11 @@ test('dispatch includes expected owner and mission and rejects changed real task
   assert.equal(validateExecutorDispatch(expected, before).ok, true);
   const prompt = executorAgentPrompt({ ...expected });
   assert.ok(prompt.includes('"owner":"mission-lead"'));
-  assert.ok(prompt.includes('"missionId":"mission-delegation"'));
+  assert.ok(prompt.includes('"goalId":"mission-delegation"'));
   assert.notEqual(prompt, executorAgentPrompt({ ...expected, owner: 'architect' }));
   assert.notEqual(prompt, executorAgentPrompt({ ...expected, missionId: 'old-mission' }));
   assert.equal(validateExecutorDispatch({ ...expected, owner: '' }, before).ok, false);
-  assert.equal(validateExecutorDispatch({ ...expected, missionId: '', objective: '' }, before).ok, false);
+  assert.equal(validateExecutorDispatch({ ...expected, goalId: '', missionId: '', objective: '' }, before).ok, false);
   assert.equal(validateExecutorDispatch({ ...expected, missionId: 'old-mission' }, before).ok, false);
   assert.equal(validateExecutorDispatch(expected, { ...before, status: 'review' }).ok, false);
   assert.equal(validateExecutorDispatch(expected, { ...before, status: 'claimed', claimed_by: 'someone-else' }).ok, false);
@@ -179,4 +179,22 @@ test('execute refuses an incomplete dispatch before enabling edit tools or reque
   assert.notEqual(result.status, 0);
   assert.match(result.stdout + result.stderr, /executor dispatch refused: missing task, owner, or mission/);
   assert.doesNotMatch(result.stdout + result.stderr, /No agent selected|Not logged in|Executing via backend API/);
+});
+
+test('mission and goal references are compared independently before executor edits', () => {
+  const task = {
+    id: 'dispatch-with-two-references', status: 'open',
+    metadata: { assigned_to: 'mission-lead', goal_id: 'goal-fixed', mission_id: 'mission-original' },
+  };
+  const expected = executorDispatchForTask(task);
+  assert.equal(validateExecutorDispatch(expected, task).ok, true);
+  const changedMission = { ...task, metadata: { ...task.metadata, mission_id: 'mission-changed' } };
+  assert.equal(validateExecutorDispatch(expected, changedMission).ok, false);
+  const changedGoal = { ...task, metadata: { ...task.metadata, goal_id: 'goal-changed' } };
+  assert.equal(validateExecutorDispatch(expected, changedGoal).ok, false);
+  assert.equal(expected.goalId, 'goal-fixed');
+  assert.equal(expected.missionId, 'mission-original');
+  const prompt = executorAgentPrompt(expected);
+  assert.ok(prompt.includes('"goalId":"goal-fixed"'));
+  assert.ok(prompt.includes('"missionId":"mission-original"'));
 });

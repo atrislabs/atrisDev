@@ -874,18 +874,19 @@ function executorDispatchForTask(task) {
   return {
     taskId: task && task.id || '',
     owner: metadata.assigned_to || task && task.claimed_by || metadata.stage_owner || '',
-    missionId: metadata.goal_id || metadata.mission_id || '',
+    goalId: metadata.goal_id || '',
+    missionId: metadata.mission_id || '',
     objective: metadata.task_goal || metadata.goal_objective || metadata.stage_goal || '',
     workspaceRoot: task && task.workspace_root || '',
   };
 }
 
 function validateExecutorDispatch(expected = {}, task) {
-  if (!expected.taskId || !expected.owner || (!expected.missionId && !expected.objective)) {
+  if (!expected.taskId || !expected.owner || (!expected.goalId && !expected.missionId && !expected.objective)) {
     return { ok: false, reason: 'missing task, owner, or mission in dispatch' };
   }
   const actual = executorDispatchForTask(task);
-  if (!task || ['taskId', 'owner', 'missionId', 'objective', 'workspaceRoot']
+  if (!task || ['taskId', 'owner', 'goalId', 'missionId', 'objective', 'workspaceRoot']
     .some(key => (expected[key] || '') !== (actual[key] || ''))) {
     return { ok: false, reason: 'task, owner, or mission changed since dispatch' };
   }
@@ -896,9 +897,9 @@ function validateExecutorDispatch(expected = {}, task) {
   return { ok: true };
 }
 
-function executorTaskHandoff({ taskId = '', owner = '', missionId = '', objective = '' } = {}) {
+function executorTaskHandoff({ taskId = '', owner = '', goalId = '', missionId = '', objective = '' } = {}) {
   const ref = taskId || '<task-id>';
-  const expected = JSON.stringify({ taskId: taskId || null, owner: owner || null, missionId: missionId || null, objective: objective || null });
+  const expected = JSON.stringify({ taskId: taskId || null, owner: owner || null, goalId: goalId || null, missionId: missionId || null, objective: objective || null });
   return `Expected dispatch: ${expected}. Before claiming or editing, run \`atris task show ${ref} --json\` for the exact current dispatched task. If the expected task ID, owner, or mission is missing, stop; no edits are allowed. Do not select another displayed row. Check the ID, current mission, active status (open or claimed by the same owner), and functional owner against these expected values. Refuse a stale or mismatched task. Read the raw metadata, requirements, events, and verify command for exact paths, flags, and engine/model instructions; the explanation and rendered TODO are summaries only. Then claim that same task with \`atris task claim ${ref} --as <task-owner>\`, using its recorded functional owner and keeping the engine separate.`;
 }
 
@@ -906,7 +907,7 @@ function executorTaskHandoff({ taskId = '', owner = '', missionId = '', objectiv
 // pure function so the emitted instructions can be tested without a network:
 // the agent claims and finishes work through the live task plane, and treats
 // atris/TODO.md as a generated view it never hand-edits.
-function executorAgentPrompt({ filteredTasks = '', taskSource = 'atris/TODO.md', context = 'UNKNOWN', taskId = '', owner = '', missionId = '', objective = '' } = {}) {
+function executorAgentPrompt({ filteredTasks = '', taskSource = 'atris/TODO.md', context = 'UNKNOWN', taskId = '', owner = '', goalId = '', missionId = '', objective = '' } = {}) {
   let userPrompt = `⚠️ CRITICAL: Execute tasks NOW. Use file tools to edit code, terminal to run commands.\n\n`;
   userPrompt += `You are the Executor. Get it done, precisely, following instructions perfectly.\n\n`;
 
@@ -917,7 +918,7 @@ function executorAgentPrompt({ filteredTasks = '', taskSource = 'atris/TODO.md',
   }
 
   userPrompt += `Your process (EXECUTE these steps):\n`;
-  userPrompt += `1. ${executorTaskHandoff({ taskId, owner, missionId, objective })}\n`;
+  userPrompt += `1. ${executorTaskHandoff({ taskId, owner, goalId, missionId, objective })}\n`;
   userPrompt += `2. For this task: Show ASCII visualization first (especially complex changes)\n`;
   userPrompt += `3. Run the Confidence Gate before editing\n`;
   userPrompt += confidenceGatePrompt('do') + `\n`;
