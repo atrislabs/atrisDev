@@ -454,6 +454,45 @@ test('all-fail notes batch exits 2', async () => {
   assert.match(log.text(), /url or id  seconds  result/);
 });
 
+test('playlist notes batch keeps printed videos when yt-dlp exits 429', async () => {
+  const playlist = 'https://www.youtube.com/playlist?list=PLrate';
+  const firstUrl = 'https://www.youtube.com/watch?v=plrate1';
+  const { cwd, workDir } = richNotesWorkspace(['plrate1']);
+  const log = collect();
+  const ran = [];
+  const status = await youtubeCommand(['notes', playlist], {
+    cwd,
+    workDir,
+    output: log.output,
+    spawnSync: (cmd, args) => {
+      assert.equal(cmd, 'yt-dlp');
+      assert.equal(args.includes('--flat-playlist'), true);
+      assert.equal(args.includes(playlist), true);
+      return {
+        status: 1,
+        stdout: 'plrate1|Partial Playlist Hit\n',
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      };
+    },
+    runner: (url) => {
+      ran.push(url);
+      return { status: 0 };
+    },
+  });
+
+  assert.equal(status, 0);
+  assert.deepEqual(ran, [firstUrl]);
+  assert.match(log.text(), /plrate1  \d+s  ok/);
+  assert.equal(log.lines.filter((line) => line === ephemeralApplyMessage('notes')).length, 1);
+  assert.equal(log.lines.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.equal(log.lines.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.deepEqual(
+    log.text().split('\n').filter((line) => line.startsWith('next: atris youtube teach')),
+    [`next: atris youtube teach "${firstUrl}"`],
+  );
+  assert.doesNotMatch(log.text(), /FAILED|429|Too Many Requests|playlist expand failed/);
+});
+
 test('expandNotesTargets leaves a plain watch url untouched', () => {
   const items = expandNotesTargets(['https://www.youtube.com/watch?v=plain1'], {
     expander: () => {
