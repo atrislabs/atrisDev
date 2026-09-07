@@ -92,7 +92,9 @@ test('do prompt claims and readies work through the live task plane and leaves a
   const prompted = runCli(['do', '--prompt'], { cwd: dir, env });
   assert.equal(prompted.status, 0, prompted.stderr || prompted.stdout);
   assert.match(prompted.stdout, /You are the Executor\./);
-  assert.match(prompted.stdout, /Read atris\/TODO\.md \(generated view\), then claim the next open task: `atris task claim <id> --as <task-owner>`/);
+  assert.match(prompted.stdout, /Before claiming or editing, run `atris task show .* --json` for the exact current dispatched task/);
+  assert.match(prompted.stdout, /Refuse a stale or mismatched task/);
+  assert.match(prompted.stdout, /Read the raw metadata, requirements, events, and verify command/);
   assert.match(prompted.stdout, /The live task plane is truth; never hand-edit TODO\.md/);
   assert.match(prompted.stdout, /atris task ready <id> --proof "<commands run>"`; a human accepts/);
   assert.match(prompted.stdout, /atris task render --out atris\/TODO\.md/);
@@ -106,8 +108,8 @@ test('executor agent prompt reads live truth, claims, readies, and never edits T
   assert.match(prompt, /You are the Executor\./);
   assert.match(prompt, /generated view from atris\/TODO\.md; live truth is `atris task list`/);
   assert.ok(prompt.includes(tasks), 'the task text is passed through unchanged');
-  assert.match(prompt, /1\. Read the tasks shown above, then claim one: `atris task claim <id> --as <task-owner>`/);
-  assert.match(prompt, /use the functional owner already named on the task; record the engine separately, do not reassign/);
+  assert.match(prompt, /1\. Before claiming or editing, run `atris task show <task-id> --json`/);
+  assert.match(prompt, /using its recorded functional owner and keeping the engine separate/);
   assert.match(prompt, /6\. Send it to review: `atris task ready <id> --proof "<commands run>"`; a human accepts/);
   assert.match(prompt, /Never hand-edit TODO\.md; `atris task render --out atris\/TODO\.md` regenerates it/);
   assert.match(prompt, /Confidence Gate/);
@@ -118,4 +120,26 @@ test('executor agent prompt reads live truth, claims, readies, and never edits T
   const empty = executorAgentPrompt({ filteredTasks: '', taskSource: 'atris/TODO.md', context: 'cli' });
   assert.match(empty, /No tasks found - run `atris task list` for the live task plane/);
   assert.doesNotMatch(empty, /check TODO\.md/);
+});
+
+
+test('rendered summaries cannot replace the dispatched raw task handoff', () => {
+  const { renderTodoMarkdown } = require('../lib/task-db');
+  const row = {
+    id: '01M1X95C2K51HKNTW7CC51HKNT', display_id: 'CLI-7',
+    title: 'Keep the runner precise', status: 'open', tag: 'capture',
+    metadata: { assigned_to: 'mission-lead', what_changes: 'Edit lib/runner-command.js with --check' },
+  };
+  const rendered = renderTodoMarkdown([row]);
+  assert.doesNotMatch(rendered, /mission-lead|lib\/runner-command\.js/);
+  const prompt = executorAgentPrompt({ filteredTasks: rendered, taskId: row.id });
+  const load = `atris task show ${row.id} --json`;
+  const claim = `atris task claim ${row.id} --as <task-owner>`;
+  assert.ok(prompt.includes(load));
+  assert.ok(prompt.indexOf(load) < prompt.indexOf(claim));
+  assert.match(prompt, /raw metadata, requirements, events, and verify command/);
+  assert.match(prompt, /Check the ID, current mission, active status \(open or claimed by the same owner\), and functional owner against the dispatch/);
+  assert.match(prompt, /Refuse a stale or mismatched task/);
+  assert.match(prompt, /do not select another displayed row/);
+  assert.doesNotMatch(prompt, /claim (?:one|the next open task)/);
 });

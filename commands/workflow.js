@@ -867,23 +867,30 @@ async function planAtris(userInput = null) {
   // Prompt mode continues with existing output (already logged above)
 }
 
+// Both executor surfaces require the exact live record before any work.
+// The rendered list omits raw instructions and cannot select the mission.
+function executorTaskHandoff(taskId = '') {
+  const ref = taskId || '<task-id>';
+  return `Before claiming or editing, run \`atris task show ${ref} --json\` for the exact current dispatched task. If no task ID was dispatched, stop and request it; do not select another displayed row. Check the ID, current mission, active status (open or claimed by the same owner), and functional owner against the dispatch. Refuse a stale or mismatched task. Read the raw metadata, requirements, events, and verify command for exact paths, flags, and engine/model instructions; the explanation and rendered TODO are summaries only. Then claim that same task with \`atris task claim ${ref} --as <task-owner>\`, using its recorded functional owner and keeping the engine separate.`;
+}
+
 // The executor prompt sent to a backend agent in --execute mode. Kept as a
 // pure function so the emitted instructions can be tested without a network:
 // the agent claims and finishes work through the live task plane, and treats
 // atris/TODO.md as a generated view it never hand-edits.
-function executorAgentPrompt({ filteredTasks = '', taskSource = 'atris/TODO.md', context = 'UNKNOWN' } = {}) {
+function executorAgentPrompt({ filteredTasks = '', taskSource = 'atris/TODO.md', context = 'UNKNOWN', taskId = '' } = {}) {
   let userPrompt = `⚠️ CRITICAL: Execute tasks NOW. Use file tools to edit code, terminal to run commands.\n\n`;
   userPrompt += `You are the Executor. Get it done, precisely, following instructions perfectly.\n\n`;
 
   if (filteredTasks) {
-    userPrompt += `## TASKS TO EXECUTE (generated view from ${taskSource}; live truth is \`atris task list\`):\n${filteredTasks}\n\n`;
+    userPrompt += `## REFERENCE TASK SUMMARIES (generated view from ${taskSource}; live truth is \`atris task list\`):\n${filteredTasks}\n\n`;
   } else {
     userPrompt += `## TASKS TO EXECUTE:\n(No tasks found - run \`atris task list\` for the live task plane)\n\n`;
   }
 
   userPrompt += `Your process (EXECUTE these steps):\n`;
-  userPrompt += `1. Read the tasks shown above, then claim one: \`atris task claim <id> --as <task-owner>\` (use the functional owner already named on the task; record the engine separately, do not reassign)\n`;
-  userPrompt += `2. For each task: Show ASCII visualization first (especially complex changes)\n`;
+  userPrompt += `1. ${executorTaskHandoff(taskId)}\n`;
+  userPrompt += `2. For this task: Show ASCII visualization first (especially complex changes)\n`;
   userPrompt += `3. Run the Confidence Gate before editing\n`;
   userPrompt += confidenceGatePrompt('do') + `\n`;
   userPrompt += `4. Execute task: Use file edit tools, terminal commands, etc.\n`;
@@ -894,7 +901,7 @@ function executorAgentPrompt({ filteredTasks = '', taskSource = 'atris/TODO.md',
   userPrompt += `8. Use MAP.md to navigate codebase\n\n`;
   userPrompt += `DO NOT just describe what you would do - actually edit files and execute commands!\n`;
   userPrompt += `Context: ${context}\n`;
-  userPrompt += `Start executing tasks now.`;
+  userPrompt += `Start only the dispatched task after the raw-record check.`;
   return userPrompt;
 }
 
@@ -1129,7 +1136,7 @@ async function doAtris() {
       console.log('');
     }
     console.log('Workflow:');
-    console.log(`1) Read ${taskSourcePath || 'atris/TODO.md'} (generated view), then claim the next open task: \`atris task claim <id> --as <task-owner>\``);
+    console.log(`1) ${executorTaskHandoff(firstMinute && firstMinute.task && firstMinute.task.id)}`);
     console.log('   The live task plane is truth; never hand-edit TODO.md to claim or move work');
     console.log('2) Run the Confidence Gate against the task before editing');
     printConfidenceGate('   ');
@@ -1207,7 +1214,7 @@ async function doAtris() {
     }
 
     // Build user prompt with context
-    const userPrompt = executorAgentPrompt({ filteredTasks, taskSource, context });
+    const userPrompt = executorAgentPrompt({ filteredTasks, taskSource, context, taskId: firstMinute && firstMinute.task && firstMinute.task.id });
 
     console.log('');
     console.log('🤖 AGENT MODE: Executing via backend API...');

@@ -81,7 +81,7 @@ Landed ahead of Steps 3-5 because every later leg depends on it. Cross-links: ba
 
 - Owner precedence in plan: explicit `--owner` > existing claim > `metadata.assigned_to` (delegated) > explicit non-generic actor > team score > default. Explicit `--owner` also moves `assigned_to`; automatic choice never overwrites a delegated owner. Claim guards are unchanged: another actor or another owner on a claimed task still gets `claimed_by_other`.
 - Exact instructions: runtime unchanged. The roundtrip test proves `delegate --what-changes/--done-looks-like/--verify` -> `plan` -> `show --json` keeps paths, flags, engine and model names, and merge/queue wording byte for byte in `metadata` and the `created` event while `explanation` stays plain. No machine consumer of the sanitized explanation was found in scoped code.
-- Generated prompts: navigator step 3 and executor steps 1 and 5, plus the `--execute` executor prompt, now name `atris task add/plan/delegate/claim/ready` and call `atris/TODO.md` a generated view. `atris task accept` is never suggested to an agent. Handoffs retain the task owner and recognize existing user authorization without changing approval gates.
+- Generated prompts: navigator step 3 and executor steps 1 and 5, plus the `--execute` executor prompt, now name `atris task add/plan/delegate/claim/ready` and call `atris/TODO.md` a generated view. `atris task accept` is never suggested to an agent. Handoffs load `atris task show <exact-task-id> --json` before claim/edit, retain raw instructions and the task owner, refuse stale or mismatched dispatches, and recognize existing user authorization without changing approval gates.
 
 **Validation (bare, no pipe):**
 
