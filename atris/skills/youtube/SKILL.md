@@ -1,7 +1,7 @@
 ---
 name: youtube
-description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 the CLI already retries; use cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.17.0
+description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 use printed rows if any; else the CLI retries once, then cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
+version: 2.18.0
 tags:
   - youtube
   - research
@@ -22,7 +22,8 @@ search QUERY (free)
         --> next: atris youtube teach <first-url>
         --> --json stays quiet
     |
-   429 --> CLI already retried once
+   429 --> printed rows? use them (no retry)
+        --> else CLI retries once
         --> cached rows printed? use them
         --> rate-limit sentence printed? STOP
              do not run --paid
@@ -66,7 +67,7 @@ never paste tokens, never /auth/cli
 ```
 
 1. Get watch permalinks: `atris youtube search QUERY` (free). A rich hit prints one inferred check plus `score: 0`. A thin hit prints `check: fill this`. Then one next teach command.
-2. If 429: wait/retry is already in the CLI. If it prints cached rows, use those. If it prints `youtube rate-limited local search. do not use --paid as a fallback; retry later.`, STOP. Do not run `--paid`.
+2. If 429: use any rows already printed. If none, wait/retry is already in the CLI. If it prints cached rows, use those. If it prints `youtube rate-limited local search. do not use --paid as a fallback; retry later.`, STOP. Do not run `--paid`.
 3. `--paid` only when the user explicitly asked to buy permalinks. The CLI hard-refuses `--paid` when the free cache still has a fresh same-query hit.
 4. `atris youtube notes URL` after a URL is picked (free). Notes is ephemeral unless `--save`. Rich ephemeral prints one apply next-step and one failing check (`score: 0`), then one `next: atris youtube teach <same-url>`, and writes no files. Thin ephemeral prints `check: fill this` instead of inventing a check. A playlist or multi-url batch does the same for the first successful item only. `--json` stays quiet on the check and the teach next-step. Rich `--save` files the brief, mints `atris/experiments/notes-<id>/`, writes one Apply, and prints `score: 0` only when that Apply starts failing. A rich multi-url `--save` batch proves that failing baseline for the first saved pack only; thin `--save` (no number-with-units and no named mechanism) refuses with no brief and exit 2. Do not auto `--paid`.
 5. Write one Apply (change + receipt) before `atris youtube process`. Process still requires a filled Apply (so you `--save` a rich brief, fill Apply, then process).
@@ -89,7 +90,7 @@ if ! command -v atris &> /dev/null; then
   npm install -g atris
 fi
 
-echo "Ready. Feature map: free search, 429 cache-or-stop, notes, then process."
+echo "Ready. Feature map: free search, 429 printed-rows or cache-or-stop, notes, then process."
 ```
 
 ---
@@ -104,7 +105,7 @@ atris youtube search "MCP agents" --json
 
 Uses `ytsearch` on PATH when present, else bundled `scripts/det/ytsearch`, else `yt-dlp --flat-playlist --print` with `ytsearchN:`. No credits. No `/agent/process_youtube` call. A rich hit prints one inferred check plus `score: 0`. A thin hit prints `check: fill this`. Then one next: `atris youtube teach <first-url>`. `--json` stays quiet.
 
-On 429 the CLI retries once, then serves `~/.atris/youtube-search-cache.json` if the same query is younger than one hour. If it prints the rate-limit sentence, stop. Do not run `--paid`.
+On 429, printed rows are a hit (no retry). If stdout is empty the CLI retries once, then serves `~/.atris/youtube-search-cache.json` if the same query is younger than one hour. If it prints the rate-limit sentence, stop. Do not run `--paid`.
 
 ## Paid search (5 credits, opt-in buy only)
 
@@ -271,7 +272,7 @@ Two layers, never mixed. The reply the person reads is flowing prose: ideas, spe
 | `400` | Invalid YouTube URL | Check URL format |
 | `502` | Transcript or cloud processing failed | Retry; credits auto-refunded when backend fails |
 | search exit 2 | ytsearch/yt-dlp missing or no results | Install yt-dlp, or put ytsearch on PATH |
-| search 429 | YouTube rate-limited local search | CLI already retried; use cached rows if printed; if the rate-limit sentence prints, STOP; do not use --paid |
+| search 429 | YouTube rate-limited local search | use printed rows if any; else CLI already retried; use cached rows if printed; if the rate-limit sentence prints, STOP; do not use --paid |
 
 ---
 

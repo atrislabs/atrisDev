@@ -310,6 +310,45 @@ test('fresh-channel seeding briefs only newest', async () => {
   assert.match(listed.text(), /1\. https:\/\/www\.youtube\.com\/@mkbhd \(3 seen\)/);
 });
 
+test('watch tick keeps printed videos when yt-dlp exits 429', async () => {
+  const cwd = tempCwd();
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-watch-notes-'));
+  const now = '2026-08-15T19:30:00.000Z';
+  await youtubeCommand(['watch', 'add', '@mkbhd'], { cwd, now, output: () => {} });
+
+  const ran = [];
+  const briefed = [];
+  const out = collect();
+  const status = await youtubeCommand(['watch', 'tick'], {
+    cwd,
+    workDir,
+    now,
+    output: out.output,
+    spawnSync: (cmd, args) => {
+      assert.equal(cmd, 'yt-dlp');
+      assert.equal(args.includes('--no-warnings'), true);
+      assert.equal(args.includes('--flat-playlist'), true);
+      return {
+        status: 1,
+        stdout: 'new1|Partial Upload\n',
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      };
+    },
+    runner: (url) => {
+      ran.push(url);
+      return { status: 0 };
+    },
+    briefFiler: ({ url }) => briefed.push(url),
+  });
+
+  assert.equal(status, 0);
+  assert.deepEqual(ran, ['https://www.youtube.com/watch?v=new1']);
+  assert.deepEqual(briefed, ['https://www.youtube.com/watch?v=new1']);
+  assert.match(out.text(), /channel https:\/\/www\.youtube\.com\/@mkbhd: 1 new, 1 briefed/);
+  assert.match(out.text(), /total: 1 new, 1 briefed/);
+  assert.doesNotMatch(out.text(), /fetch failed|429|Too Many Requests/);
+});
+
 test('failed fetch skips channel and continues', async () => {
   const cwd = tempCwd();
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-watch-notes-'));

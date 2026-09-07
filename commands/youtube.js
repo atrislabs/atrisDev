@@ -1285,6 +1285,7 @@ function defaultChannelFetcher(videosUrl, deps = {}) {
   const result = spawn('yt-dlp', [
     '--no-update',
     '--flat-playlist',
+    '--no-warnings',
     '--playlist-end',
     '3',
     '--print',
@@ -1295,11 +1296,13 @@ function defaultChannelFetcher(videosUrl, deps = {}) {
     timeout: 60000,
     maxBuffer: 2 * 1024 * 1024,
   });
+  const videos = parseFlatPlaylist(result && result.stdout);
+  if (videos.length) return videos;
   if (result.error || result.status !== 0) {
     const detail = String(result.stderr || result.error?.message || 'fetch failed').trim();
     throw new Error(detail || 'fetch failed');
   }
-  return parseFlatPlaylist(result.stdout);
+  return videos;
 }
 
 function defaultNotesRunner(url, deps = {}) {
@@ -2209,6 +2212,23 @@ function printSearchLearnerGate(rows, options, output) {
   });
 }
 
+function resultStdout(result) {
+  if (typeof result === 'string') return result;
+  return String((result && result.stdout) || '');
+}
+
+function searchRowsFromResult(result) {
+  return parseSearchStdout(resultStdout(result));
+}
+
+function finishSuccessfulSearch(rows, options, output, deps) {
+  writeLocalSearchCache(options.query, rows, deps);
+  printSearchRows(rows, options, output);
+  printSearchLearnerGate(rows, options, output);
+  printSearchTeachNext(rows, options, output);
+  return 0;
+}
+
 function commandOnPath(name, deps = {}) {
   const spawn = deps.spawnSync || spawnSync;
   const result = spawn('sh', ['-c', `command -v ${shellSingleQuote(name)}`], {
@@ -2325,6 +2345,9 @@ async function runYoutubeSearch(args = [], deps = {}) {
     return 2;
   }
 
+  let rows = searchRowsFromResult(result);
+  if (rows.length) return finishSuccessfulSearch(rows, options, output, deps);
+
   let status = searchRunnerStatus(result);
   if (status != null && status !== 0 && isLocalSearchRateLimited(result)) {
     await waitLocalSearchBackoff(deps);
@@ -2338,13 +2361,15 @@ async function runYoutubeSearch(args = [], deps = {}) {
       output('ytsearch and yt-dlp not found. Install yt-dlp or put ytsearch on PATH.');
       return 2;
     }
+    rows = searchRowsFromResult(result);
+    if (rows.length) return finishSuccessfulSearch(rows, options, output, deps);
     status = searchRunnerStatus(result);
     if (status != null && status !== 0 && isLocalSearchRateLimited(result)) {
       const cached = readFreshLocalSearchCache(options.query, deps);
       if (cached) {
-        const rows = cached.rows.slice(0, options.limit);
-        printSearchRows(rows, options, output);
-        printSearchTeachNext(rows, options, output);
+        const cachedRows = cached.rows.slice(0, options.limit);
+        printSearchRows(cachedRows, options, output);
+        printSearchTeachNext(cachedRows, options, output);
         output(LOCAL_SEARCH_CACHE_NOTE);
         return 0;
       }
@@ -2359,19 +2384,9 @@ async function runYoutubeSearch(args = [], deps = {}) {
     return status == null ? 1 : status;
   }
 
-  const stdout = typeof result === 'string' ? result : String((result && result.stdout) || '');
-  const rows = parseSearchStdout(stdout);
-  if (!rows.length) {
-    output('no videos found');
-    if (!options.json) printWatchTickNext(output);
-    return 2;
-  }
-
-  writeLocalSearchCache(options.query, rows, deps);
-  printSearchRows(rows, options, output);
-  printSearchLearnerGate(rows, options, output);
-  printSearchTeachNext(rows, options, output);
-  return 0;
+  output('no videos found');
+  if (!options.json) printWatchTickNext(output);
+  return 2;
 }
 
 const YTTEACH_USAGE = 'usage: atris youtube teach <youtube-url> [--section N] [--save] [--recap TEXT] [--skip] | owed | next';
