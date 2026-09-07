@@ -1,7 +1,7 @@
 ---
 name: youtube
 description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 use printed rows if any; else the CLI retries once, then cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.18.0
+version: 2.18.1
 tags:
   - youtube
   - research
@@ -34,6 +34,7 @@ search QUERY (free)
     |                 then next: atris youtube teach <same-url>
     |                 --json stays quiet
     |                 --save files brief + pack-named apply when notes have a number or named mechanism; a multi-url --save batch proves the first saved pack the same way single-url --save does; thin --save refuses
+    |                 playlist expand keeps printed yt-dlp rows on 429
     |            or teach URL [--section N] (one chapter: claim numbers, named mechanisms, one check; free unless --save)
     |                 a taught section that is not last prints next: recap TEXT or skip
     |                 last section: rich ephemeral apply, failing check, and score 0, then next: atris youtube watch tick; save pack keep stays; no recap next
@@ -69,7 +70,7 @@ never paste tokens, never /auth/cli
 1. Get watch permalinks: `atris youtube search QUERY` (free). A rich hit prints one inferred check plus `score: 0`. A thin hit prints `check: fill this`. Then one next teach command.
 2. If 429: use any rows already printed. If none, wait/retry is already in the CLI. If it prints cached rows, use those. If it prints `youtube rate-limited local search. do not use --paid as a fallback; retry later.`, STOP. Do not run `--paid`.
 3. `--paid` only when the user explicitly asked to buy permalinks. The CLI hard-refuses `--paid` when the free cache still has a fresh same-query hit.
-4. `atris youtube notes URL` after a URL is picked (free). Notes is ephemeral unless `--save`. Rich ephemeral prints one apply next-step and one failing check (`score: 0`), then one `next: atris youtube teach <same-url>`, and writes no files. Thin ephemeral prints `check: fill this` instead of inventing a check. A playlist or multi-url batch does the same for the first successful item only. `--json` stays quiet on the check and the teach next-step. Rich `--save` files the brief, mints `atris/experiments/notes-<id>/`, writes one Apply, and prints `score: 0` only when that Apply starts failing. A rich multi-url `--save` batch proves that failing baseline for the first saved pack only; thin `--save` (no number-with-units and no named mechanism) refuses with no brief and exit 2. Do not auto `--paid`.
+4. `atris youtube notes URL` after a URL is picked (free). Notes is ephemeral unless `--save`. Rich ephemeral prints one apply next-step and one failing check (`score: 0`), then one `next: atris youtube teach <same-url>`, and writes no files. Thin ephemeral prints `check: fill this` instead of inventing a check. A playlist or multi-url batch does the same for the first successful item only. A playlist expand that prints video rows keeps them even when yt-dlp exits 429. `--json` stays quiet on the check and the teach next-step. Rich `--save` files the brief, mints `atris/experiments/notes-<id>/`, writes one Apply, and prints `score: 0` only when that Apply starts failing. A rich multi-url `--save` batch proves that failing baseline for the first saved pack only; thin `--save` (no number-with-units and no named mechanism) refuses with no brief and exit 2. Do not auto `--paid`.
 5. Write one Apply (change + receipt) before `atris youtube process`. Process still requires a filled Apply (so you `--save` a rich brief, fill Apply, then process).
 6. Never paste tokens. Never `/auth/cli`. Mint with `atris login --agent` from a stored login.
 

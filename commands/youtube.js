@@ -1564,11 +1564,13 @@ function defaultPlaylistExpander(playlistUrl, deps = {}) {
     timeout: 60000,
     maxBuffer: 2 * 1024 * 1024,
   });
+  const videos = parseFlatPlaylist(result && result.stdout);
+  if (videos.length) return videos;
   if (result.error || (result.status != null && result.status !== 0)) {
     const detail = String(result.stderr || result.error?.message || 'playlist expand failed').trim();
     throw new Error(detail || 'playlist expand failed');
   }
-  return parseFlatPlaylist(result.stdout);
+  return videos;
 }
 
 function defaultNotesItemRunner(url, engine, deps = {}) {
