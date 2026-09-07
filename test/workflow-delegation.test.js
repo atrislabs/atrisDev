@@ -12,7 +12,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { spawnSync } = require('node:child_process');
-const { executorAgentPrompt } = require('../commands/workflow');
+const { executorAgentPrompt, executorDispatchForTask, validateExecutorDispatch } = require('../commands/workflow');
 
 const repoRoot = path.resolve(__dirname, '..');
 const cliPath = path.join(repoRoot, 'bin', 'atris.js');
@@ -108,7 +108,7 @@ test('executor agent prompt reads live truth, claims, readies, and never edits T
   assert.match(prompt, /You are the Executor\./);
   assert.match(prompt, /generated view from atris\/TODO\.md; live truth is `atris task list`/);
   assert.ok(prompt.includes(tasks), 'the task text is passed through unchanged');
-  assert.match(prompt, /1\. Before claiming or editing, run `atris task show <task-id> --json`/);
+  assert.match(prompt, /Before claiming or editing, run `atris task show <task-id> --json`/);
   assert.match(prompt, /using its recorded functional owner and keeping the engine separate/);
   assert.match(prompt, /6\. Send it to review: `atris task ready <id> --proof "<commands run>"`; a human accepts/);
   assert.match(prompt, /Never hand-edit TODO\.md; `atris task render --out atris\/TODO\.md` regenerates it/);
@@ -138,8 +138,45 @@ test('rendered summaries cannot replace the dispatched raw task handoff', () => 
   assert.ok(prompt.includes(load));
   assert.ok(prompt.indexOf(load) < prompt.indexOf(claim));
   assert.match(prompt, /raw metadata, requirements, events, and verify command/);
-  assert.match(prompt, /Check the ID, current mission, active status \(open or claimed by the same owner\), and functional owner against the dispatch/);
+  assert.match(prompt, /Check the ID, current mission, active status \(open or claimed by the same owner\), and functional owner against these expected values/);
   assert.match(prompt, /Refuse a stale or mismatched task/);
-  assert.match(prompt, /do not select another displayed row/);
+  assert.match(prompt, /Do not select another displayed row/);
   assert.doesNotMatch(prompt, /claim (?:one|the next open task)/);
+});
+
+
+test('dispatch includes expected owner and mission and rejects changed real task records', () => {
+  const { dir, env } = initializedWorkspace();
+  const created = runCli(['task', 'delegate', 'Keep the exact assignment', '--to', 'mission-lead', '--goal-id', 'mission-delegation', '--json'], { cwd: dir, env });
+  assert.equal(created.status, 0, created.stderr || created.stdout);
+  const id = JSON.parse(created.stdout).task_id;
+  const read = () => {
+    const shown = runCli(['task', 'show', id, '--json'], { cwd: dir, env });
+    assert.equal(shown.status, 0, shown.stderr || shown.stdout);
+    return JSON.parse(shown.stdout);
+  };
+  const before = read();
+  const expected = executorDispatchForTask(before);
+  assert.equal(validateExecutorDispatch(expected, before).ok, true);
+  const prompt = executorAgentPrompt({ ...expected });
+  assert.ok(prompt.includes('"owner":"mission-lead"'));
+  assert.ok(prompt.includes('"missionId":"mission-delegation"'));
+  assert.notEqual(prompt, executorAgentPrompt({ ...expected, owner: 'architect' }));
+  assert.notEqual(prompt, executorAgentPrompt({ ...expected, missionId: 'old-mission' }));
+  assert.equal(validateExecutorDispatch({ ...expected, owner: '' }, before).ok, false);
+  assert.equal(validateExecutorDispatch({ ...expected, missionId: '', objective: '' }, before).ok, false);
+  assert.equal(validateExecutorDispatch({ ...expected, missionId: 'old-mission' }, before).ok, false);
+  assert.equal(validateExecutorDispatch(expected, { ...before, status: 'review' }).ok, false);
+  assert.equal(validateExecutorDispatch(expected, { ...before, status: 'claimed', claimed_by: 'someone-else' }).ok, false);
+  const changed = runCli(['task', 'plan', id, '--owner', 'architect', '--goal', 'Keep the exact assignment', '--exit', 'The assignment matches', '--proof-needed', 'node --test test/workflow-delegation.test.js', '--json'], { cwd: dir, env });
+  assert.equal(changed.status, 0, changed.stderr || changed.stdout);
+  assert.equal(validateExecutorDispatch(expected, read()).ok, false, 'a real reassignment invalidates the captured dispatch');
+});
+
+test('execute refuses an incomplete dispatch before enabling edit tools or requesting credentials', () => {
+  const { dir, env } = initializedWorkspace();
+  const result = runCli(['do', '--execute'], { cwd: dir, env });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stdout + result.stderr, /executor dispatch refused: missing task, owner, or mission/);
+  assert.doesNotMatch(result.stdout + result.stderr, /No agent selected|Not logged in|Executing via backend API/);
 });

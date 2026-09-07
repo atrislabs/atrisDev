@@ -58,6 +58,7 @@ git diff --check
 - [ ] An unassigned task still gets automatic team choice (`owner_source: team`).
 - [ ] A claimed task refuses `plan` from another actor or with another `--owner` (`claimed_by_other`).
 - [ ] `delegate --what-changes ... --verify ...` -> `plan` -> `show --json` keeps exact paths, flags, engine/model, and merge/queue strings in `metadata` and the `created` event; `explanation.what_changes` has none of them.
+- [ ] Expected owner and mission values appear in both executor prompts. Missing values, changed real task records, inactive rows, and foreign claims fail the pre-edit check; incomplete dispatch stops before credentials or edit tools.
 - [ ] A rendered TODO row omitting the owner and path still yields a prompt that requires the exact dispatched task JSON before claim/edit; stale or mismatched tasks are refused.
 - [ ] `atris plan --prompt`, `atris do --prompt`, and `executorAgentPrompt()` name `atris task add/plan/claim/ready`, call TODO.md a generated view, and never suggest `atris task accept`.
 
