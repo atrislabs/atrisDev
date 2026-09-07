@@ -365,9 +365,11 @@ test('plan on an initialized workspace prints the navigator prompt shape', () =>
   assert.match(res.stdout, /COPY\/PASTE PROMPT FOR YOUR CODING AGENT:/);
   assert.match(res.stdout, /You are the Navigator\./);
   // Step sequence: visualize -> confidence gate -> tasks -> log -> stop.
-  assert.match(res.stdout, /1\) ASCII visualize \+ wait for approval/);
+  assert.match(res.stdout, /1\) ASCII visualize; use existing approval for this scope, otherwise wait for approval/);
   assert.match(res.stdout, /Confidence Gate/);
-  assert.match(res.stdout, /3\) Write tasks to atris\/TODO\.md under ## Backlog/);
+  assert.match(res.stdout, /3\) Create each task in the live task plane: `atris task add "<title>" --tag <tag>`/);
+  assert.match(res.stdout, /atris\/TODO\.md is a generated view: never hand-edit it/);
+  assert.doesNotMatch(res.stdout, /Write tasks to atris\/TODO\.md/);
   assert.match(res.stdout, /5\) Stop\. Do NOT execute/);
   assert.match(res.stdout, /Inbox items: \d+/);
 });

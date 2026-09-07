@@ -710,11 +710,12 @@ async function planAtris(userInput = null) {
     console.log('');
   }
   console.log('Workflow:');
-  console.log('1) ASCII visualize + wait for approval');
+  console.log('1) ASCII visualize; use existing approval for this scope, otherwise wait for approval');
   console.log('2) Run the Confidence Gate before writing tasks');
   printConfidenceGate('   ');
-  console.log('3) Write tasks to atris/TODO.md under ## Backlog');
-  console.log('   Format: - **T#:** Description [explore|execute]');
+  console.log('3) Create each task in the live task plane: `atris task add "<title>" --tag <tag>`, then `atris task plan <id> --goal ... --exit ... --proof-needed ...`');
+  console.log('   Keep a delegated owner: `atris task delegate "<title>" --to <member>`; plan keeps that owner unless you pass --owner');
+  console.log('   atris/TODO.md is a generated view: never hand-edit it, regenerate with `atris task render --out atris/TODO.md`');
   console.log('4) Log to atris/team/navigator/logs/YYYY-MM-DD.md');
   console.log('   (Task, Delivered, User reaction, Pattern)');
   if (atris2Mode) {
@@ -783,7 +784,7 @@ async function planAtris(userInput = null) {
     userPrompt += `Your job (execute these steps):\n\n`;
     userPrompt += `STEP 1: Generate ASCII visualizations for user approval\n`;
     userPrompt += `   Create diagrams showing architecture, flows, schemas, UI/UX.\n`;
-    userPrompt += `   SHOW these diagrams and wait for approval before proceeding.\n\n`;
+    userPrompt += `   SHOW these diagrams; use existing approval for this scope, otherwise wait for approval before proceeding.\n\n`;
     userPrompt += `STEP 2: Run the Confidence Gate before writing tasks\n`;
     userPrompt += confidenceGatePrompt('plan') + `\n\n`;
     userPrompt += `STEP 3: Break approved ideas into concrete tasks\n`;
@@ -864,6 +865,37 @@ async function planAtris(userInput = null) {
     }
   }
   // Prompt mode continues with existing output (already logged above)
+}
+
+// The executor prompt sent to a backend agent in --execute mode. Kept as a
+// pure function so the emitted instructions can be tested without a network:
+// the agent claims and finishes work through the live task plane, and treats
+// atris/TODO.md as a generated view it never hand-edits.
+function executorAgentPrompt({ filteredTasks = '', taskSource = 'atris/TODO.md', context = 'UNKNOWN' } = {}) {
+  let userPrompt = `⚠️ CRITICAL: Execute tasks NOW. Use file tools to edit code, terminal to run commands.\n\n`;
+  userPrompt += `You are the Executor. Get it done, precisely, following instructions perfectly.\n\n`;
+
+  if (filteredTasks) {
+    userPrompt += `## TASKS TO EXECUTE (generated view from ${taskSource}; live truth is \`atris task list\`):\n${filteredTasks}\n\n`;
+  } else {
+    userPrompt += `## TASKS TO EXECUTE:\n(No tasks found - run \`atris task list\` for the live task plane)\n\n`;
+  }
+
+  userPrompt += `Your process (EXECUTE these steps):\n`;
+  userPrompt += `1. Read the tasks shown above, then claim one: \`atris task claim <id> --as <task-owner>\` (use the functional owner already named on the task; record the engine separately, do not reassign)\n`;
+  userPrompt += `2. For each task: Show ASCII visualization first (especially complex changes)\n`;
+  userPrompt += `3. Run the Confidence Gate before editing\n`;
+  userPrompt += confidenceGatePrompt('do') + `\n`;
+  userPrompt += `4. Execute task: Use file edit tools, terminal commands, etc.\n`;
+  userPrompt += `5. Before completion, rerun the gate against proof and residual risk\n`;
+  userPrompt += `6. Send it to review: \`atris task ready <id> --proof "<commands run>"\`; a human accepts. Never hand-edit TODO.md; \`atris task render --out atris/TODO.md\` regenerates it\n`;
+  userPrompt += `7. Log to atris/team/executor/logs/YYYY-MM-DD.md\n`;
+  userPrompt += `   (Task, Delivered, Errors hit, Learned)\n`;
+  userPrompt += `8. Use MAP.md to navigate codebase\n\n`;
+  userPrompt += `DO NOT just describe what you would do - actually edit files and execute commands!\n`;
+  userPrompt += `Context: ${context}\n`;
+  userPrompt += `Start executing tasks now.`;
+  return userPrompt;
 }
 
 async function doAtris() {
@@ -1097,13 +1129,13 @@ async function doAtris() {
       console.log('');
     }
     console.log('Workflow:');
-    console.log('1) Read atris/TODO.md, then claim next unclaimed Backlog task');
-    console.log('   Move to ## In Progress: add "Claimed by: executor at YYYY-MM-DD HH:MM"');
+    console.log(`1) Read ${taskSourcePath || 'atris/TODO.md'} (generated view), then claim the next open task: \`atris task claim <id> --as <task-owner>\``);
+    console.log('   The live task plane is truth; never hand-edit TODO.md to claim or move work');
     console.log('2) Run the Confidence Gate against the task before editing');
     printConfidenceGate('   ');
     console.log('3) Execute step-by-step. Run tests as you go.');
     console.log('4) Before completion, rerun the gate against proof and residual risk');
-    console.log('5) When done, move task to ## Completed');
+    console.log('5) When done, send it to review: `atris task ready <id> --proof "<commands run>"`; a human accepts, then `atris task render --out atris/TODO.md` refreshes the view');
     console.log('6) Log to atris/team/executor/logs/YYYY-MM-DD.md');
     console.log('   (Task, Delivered, Errors hit, Learned)');
     console.log('');
@@ -1175,29 +1207,7 @@ async function doAtris() {
     }
 
     // Build user prompt with context
-    let userPrompt = `⚠️ CRITICAL: Execute tasks NOW. Use file tools to edit code, terminal to run commands.\n\n`;
-    userPrompt += `You are the Executor. Get it done, precisely, following instructions perfectly.\n\n`;
-
-    if (filteredTasks) {
-      userPrompt += `## TASKS TO EXECUTE (from ${taskSource}):\n${filteredTasks}\n\n`;
-    } else {
-      userPrompt += `## TASKS TO EXECUTE:\n(No tasks found - check TODO.md)\n\n`;
-    }
-
-    userPrompt += `Your process (EXECUTE these steps):\n`;
-    userPrompt += `1. Read tasks from TODO.md (shown above)\n`;
-    userPrompt += `2. For each task: Show ASCII visualization first (especially complex changes)\n`;
-    userPrompt += `3. Run the Confidence Gate before editing\n`;
-    userPrompt += confidenceGatePrompt('do') + `\n`;
-    userPrompt += `4. Execute task: Use file edit tools, terminal commands, etc.\n`;
-    userPrompt += `5. Before completion, rerun the gate against proof and residual risk\n`;
-    userPrompt += `6. Move task to ## Completed in TODO.md\n`;
-    userPrompt += `7. Log to atris/team/executor/logs/YYYY-MM-DD.md\n`;
-    userPrompt += `   (Task, Delivered, Errors hit, Learned)\n`;
-    userPrompt += `8. Use MAP.md to navigate codebase\n\n`;
-    userPrompt += `DO NOT just describe what you would do - actually edit files and execute commands!\n`;
-    userPrompt += `Context: ${context}\n`;
-    userPrompt += `Start executing tasks now.`;
+    const userPrompt = executorAgentPrompt({ filteredTasks, taskSource, context });
 
     console.log('');
     console.log('🤖 AGENT MODE: Executing via backend API...');
@@ -1844,6 +1854,7 @@ module.exports = {
   doAtris,
   reviewAtris,
   renderReviewMinute,
+  executorAgentPrompt,
   executeAgentSDKFast,
   makeCloudExecutor,
   postToolResult

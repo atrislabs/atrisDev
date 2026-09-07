@@ -119,6 +119,27 @@ Run `atris engine doctor`, then `atris engine --help`. The canonical profiles li
 
 ## Prompt contract (every dispatch)
 
+Before build, fetch and identify the configured remote default, compare the
+checkout to it, and preserve unrelated work. Record the base before editing.
+Use the existing feature packet and functional owner; link source task IDs
+across workspaces rather than copying a second plan. Load the relevant owner
+bundle once. Live `atris task` records are truth; TODO.md is a rendered view.
+
+If scouting, request at most 200 words naming the exact current mission,
+owner, engine/model, files, checks, and risks. Reject an answer about an old
+mission. Hand the accepted packet to the builder; reread only to resolve a
+named gap. Use raw task metadata and events for exact paths and instructions,
+never the simplified explanation. Verify requested models; never substitute
+silently. Existing user authorization covers execution within that scope;
+required plan review, CI, human-only acceptance, and deploy gates still apply.
+
+Review related finished changes as one batch in a fresh context. Reuse a
+review only while those bytes remain unchanged; changed bytes require
+revalidation. Run required checks before the existing delivery path. Inspect
+the actual final state: draft, queued, and merged are different outcomes.
+Record elapsed time, engine calls, retries, and exposed token usage. Unknown
+usage stays unknown; one pilot does not establish a speedup or perfect accuracy.
+
 1. Name the absolute repo path and tell the engine to `cd` there (Atris Fast scopes to the cwd it runs from — cd first, and name absolute paths in the prompt).
 2. Bound the slice: one task, explicit exit criteria, the verify command to run.
 3. Git rules: `git status` first; stage only own files; never revert others' changes; never destructive git; work on a branch `member/<name>-<slug>` or a worktree. (Atris Fast does not run git — for edit tasks the orchestrator commits after verifying.)

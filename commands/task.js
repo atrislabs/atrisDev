@@ -7481,6 +7481,7 @@ function cmdPlan(args) {
     goal,
     summary,
     owner: automaticPlan.ownerForStage || owner,
+    ownerExplicit: Boolean(owner),
     exit,
     proofNeeded,
     firstMove,
@@ -8415,9 +8416,13 @@ function buildAutomaticPlanTrace(taskDb, task, { actor, actorExplicit = false, o
   const metadata = task.metadata || {};
   const purpose = cleanPublicText(goal, 240) || taskPurpose(task);
   const claimedOwner = cleanPublicText(task.claimed_by, 80);
+  // A delegated owner (metadata.assigned_to) is a functional decision already
+  // recorded on the task. Only an explicit caller owner or an existing claim
+  // outranks it; automatic team choice never does.
+  const delegatedOwner = cleanPublicText(metadata.assigned_to, 80);
   const actorNamed = taskTextMentionsActor(actor, `${purpose} ${task.title || ''} ${task.tag || ''}`);
   const requestedActor = actorExplicit && (!isGenericPlanActor(actor) || actorNamed) ? actor : null;
-  const requestedOwner = owner || claimedOwner || requestedActor || null;
+  const requestedOwner = owner || claimedOwner || delegatedOwner || requestedActor || null;
   const ownerChoice = chooseTaskOwner({
     purpose,
     tag: task.tag,
@@ -12838,6 +12843,7 @@ function postTaskApiPlan({ res, taskDb, db, taskId, body }) {
     goal,
     summary,
     owner: automaticPlan.ownerForStage || owner,
+    ownerExplicit: Boolean(owner),
     exit,
     proofNeeded: String(body.proof_needed || body.proofNeeded || body.proof || body.verify || ''),
     firstMove,
