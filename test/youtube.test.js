@@ -259,6 +259,46 @@ test('extractLocalTranscript parses yt-dlp json3 captions', async () => {
   assert.equal(result.durationSeconds, 44);
 });
 
+test('extractLocalTranscript keeps parseable yt-dlp json when yt-dlp exits 429', async () => {
+  const result = await extractLocalTranscript('https://youtube.com/watch?v=abc123', {
+    spawnSync: () => ({
+      status: 1,
+      stdout: JSON.stringify({
+        duration: 44,
+        automatic_captions: {
+          en: [{ ext: 'json3', url: 'https://www.youtube.com/api/timedtext?v=abc123' }],
+        },
+      }),
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => JSON.stringify({
+      events: [
+        { tStartMs: 0, segs: [{ utf8: 'Hello ' }, { utf8: 'world' }] },
+        { tStartMs: 1200, segs: [{ utf8: 'Next idea' }] },
+      ],
+    }),
+  });
+
+  assert.equal(result.transcriptText, '[00:00] Hello world\n[00:01] Next idea');
+  assert.equal(result.language, 'en');
+  assert.equal(result.durationSeconds, 44);
+});
+
+test('extractLocalTranscript still fails when 429 stdout is empty', async () => {
+  const result = await extractLocalTranscript('https://youtube.com/watch?v=abc123', {
+    spawnSync: () => ({
+      status: 1,
+      stdout: '',
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => JSON.stringify({
+      events: [{ tStartMs: 0, segs: [{ utf8: 'Hello' }] }],
+    }),
+  });
+
+  assert.equal(result, null);
+});
+
 test('extractLocalTranscript preserves VTT timestamps', async () => {
   const result = await extractLocalTranscript('https://youtube.com/watch?v=abc123', {
     spawnSync: () => ({

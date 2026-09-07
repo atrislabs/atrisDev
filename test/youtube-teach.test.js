@@ -15,6 +15,7 @@ const {
   extractTeachNumbers,
   extractTeachMechanisms,
   extractTeachSource,
+  parseYtDlpInfoJson,
   oneTeachCheck,
   learnerCheckFromLesson,
   scoreLearnerNeedles,
@@ -1083,6 +1084,83 @@ test('extractTeachSource reads fixture yt-dlp chapters and VTT without network',
   assert.equal(source.chapters[0].title, 'Omakase');
   assert.equal(source.cues.length, 3);
   assert.match(source.cues[0].text, /80 people/);
+});
+
+test('extractTeachSource keeps parseable yt-dlp json when yt-dlp exits 429', async () => {
+  const source = await extractTeachSource(TEACH_URL, {
+    spawnSync: () => ({
+      status: 1,
+      stdout: JSON.stringify({
+        id: 'teach01',
+        title: 'DHH on Lex Fridman',
+        duration: 900,
+        chapters: TEACH_CHAPTERS,
+        automatic_captions: {
+          en: [{ ext: 'vtt', url: 'https://www.youtube.com/api/timedtext?v=teach01' }],
+        },
+      }),
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => TEACH_VTT,
+  });
+
+  assert.equal(source.id, 'teach01');
+  assert.equal(source.chapters.length, 2);
+  assert.equal(source.cues.length, 3);
+  assert.match(source.cues[0].text, /80 people/);
+});
+
+test('extractTeachSource still fails when 429 stdout is empty or broken', async () => {
+  const empty = await extractTeachSource(TEACH_URL, {
+    spawnSync: () => ({
+      status: 1,
+      stdout: '',
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => TEACH_VTT,
+  });
+  const broken = await extractTeachSource(TEACH_URL, {
+    spawnSync: () => ({
+      status: 1,
+      stdout: '{"id":"teach01"',
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => TEACH_VTT,
+  });
+
+  assert.equal(empty, null);
+  assert.equal(broken, null);
+  assert.equal(parseYtDlpInfoJson({ status: 1, stdout: '' }), null);
+  assert.equal(parseYtDlpInfoJson({ status: 1, stdout: '{"id":"teach01"' }), null);
+});
+
+test('youtube teach keeps the lesson when yt-dlp exits 429 with json', async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-429-'));
+  const out = collect();
+  const status = await youtubeCommand(['teach', TEACH_URL], {
+    cwd,
+    output: out.output,
+    spawnSync: () => ({
+      status: 1,
+      stdout: JSON.stringify({
+        id: 'teach01',
+        title: 'DHH on Lex Fridman',
+        duration: 900,
+        chapters: TEACH_CHAPTERS,
+        automatic_captions: {
+          en: [{ ext: 'vtt', url: 'https://www.youtube.com/api/timedtext?v=teach01' }],
+        },
+      }),
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => TEACH_VTT,
+  });
+
+  assert.equal(status, 0);
+  assert.match(out.text(), /section 1\/2  omakase/);
+  assert.match(out.text(), /check\nwhat is the omakase model\?/);
+  assert.doesNotMatch(out.text(), /no english captions|429|Too Many Requests/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris')), false);
 });
 
 test('youtube teach without captions prints no apply next-step', async () => {
