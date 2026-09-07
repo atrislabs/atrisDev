@@ -313,6 +313,78 @@ test('youtube search runner failure surfaces stderr', async () => {
   assert.match(output.join('\n'), /yt-dlp exploded/);
 });
 
+test('youtube search keeps printed rows when yt-dlp exits 429', async () => {
+  const output = [];
+  const sleeps = [];
+  let runnerCalls = 0;
+  const fsMock = mockSearchFs();
+  const now = 1_700_000_000_000;
+  const status = await youtubeCommand(['search', 'MCP agents 2026'], {
+    ...cacheDeps({ fs: fsMock, now: () => now }),
+    output: (line) => output.push(line),
+    sleep: async (ms) => { sleeps.push(ms); },
+    runner: () => {
+      runnerCalls += 1;
+      return {
+        status: 1,
+        stdout: `${SAMPLE_LINE}\n`,
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      };
+    },
+  });
+
+  assert.equal(status, 0);
+  assert.equal(runnerCalls, 1);
+  assert.deepEqual(sleeps, []);
+  const text = output.join('\n');
+  assert.match(text, /https:\/\/youtu\.be\/mcp2026a/);
+  assert.match(text, /MCP Agents in 2026/);
+  assert.equal(output.filter((line) => line === `check: ${LEARNER_CHECK_FILL}`).length, 1);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 0);
+  assert.equal(output.includes(TEACH_NEXT_LINE), true);
+  assert.doesNotMatch(text, /429|Too Many Requests|rate-limited|--paid|\/youtube\/search/);
+  const cached = JSON.parse(fsMock.store[CACHE_PATH]);
+  assert.equal(cached.query, 'MCP agents 2026');
+  assert.deepEqual(cached.rows, [SAMPLE_ROW]);
+});
+
+test('youtube search retry keeps printed rows after a first empty 429', async () => {
+  const output = [];
+  const sleeps = [];
+  const calls = [];
+  const status = await youtubeCommand(['search', 'omakase'], {
+    ...cacheDeps(),
+    output: (line) => output.push(line),
+    sleep: async (ms) => { sleeps.push(ms); },
+    runner: (query, limit) => {
+      calls.push({ query, limit });
+      if (calls.length === 1) {
+        return {
+          status: 1,
+          stdout: '',
+          stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+        };
+      }
+      return {
+        status: 1,
+        stdout: '37signals uses the omakase model | Basecamp | 12:00 | 100 | 20260801 | https://youtu.be/omakase1\n',
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      };
+    },
+  });
+
+  assert.equal(status, 0);
+  assert.deepEqual(calls, [
+    { query: 'omakase', limit: 5 },
+    { query: 'omakase', limit: 5 },
+  ]);
+  assert.deepEqual(sleeps, [1000]);
+  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.equal(output.includes('next: atris youtube teach "https://youtu.be/omakase1"'), true);
+  assert.doesNotMatch(output.join('\n'), /429|Too Many Requests|rate-limited|--paid/);
+});
+
 test('youtube search retries once after a 429 then prints videos', async () => {
   const output = [];
   const sleeps = [];
