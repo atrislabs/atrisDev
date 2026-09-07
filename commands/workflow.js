@@ -710,11 +710,12 @@ async function planAtris(userInput = null) {
     console.log('');
   }
   console.log('Workflow:');
-  console.log('1) ASCII visualize + wait for approval');
+  console.log('1) ASCII visualize; use existing approval for this scope, otherwise wait for approval');
   console.log('2) Run the Confidence Gate before writing tasks');
   printConfidenceGate('   ');
-  console.log('3) Write tasks to atris/TODO.md under ## Backlog');
-  console.log('   Format: - **T#:** Description [explore|execute]');
+  console.log('3) Create each task in the live task plane: `atris task add "<title>" --tag <tag>`, then `atris task plan <id> --goal ... --exit ... --proof-needed ...`');
+  console.log('   Keep a delegated owner: `atris task delegate "<title>" --to <member>`; plan keeps that owner unless you pass --owner');
+  console.log('   atris/TODO.md is a generated view: never hand-edit it, regenerate with `atris task render --out atris/TODO.md`');
   console.log('4) Log to atris/team/navigator/logs/YYYY-MM-DD.md');
   console.log('   (Task, Delivered, User reaction, Pattern)');
   if (atris2Mode) {
@@ -783,7 +784,7 @@ async function planAtris(userInput = null) {
     userPrompt += `Your job (execute these steps):\n\n`;
     userPrompt += `STEP 1: Generate ASCII visualizations for user approval\n`;
     userPrompt += `   Create diagrams showing architecture, flows, schemas, UI/UX.\n`;
-    userPrompt += `   SHOW these diagrams and wait for approval before proceeding.\n\n`;
+    userPrompt += `   SHOW these diagrams; use existing approval for this scope, otherwise wait for approval before proceeding.\n\n`;
     userPrompt += `STEP 2: Run the Confidence Gate before writing tasks\n`;
     userPrompt += confidenceGatePrompt('plan') + `\n\n`;
     userPrompt += `STEP 3: Break approved ideas into concrete tasks\n`;
@@ -864,6 +865,73 @@ async function planAtris(userInput = null) {
     }
   }
   // Prompt mode continues with existing output (already logged above)
+}
+
+// Both executor surfaces require the exact live record before any work.
+// The rendered list omits raw instructions and cannot select the mission.
+function executorDispatchForTask(task) {
+  const metadata = task && task.metadata || {};
+  return {
+    taskId: task && task.id || '',
+    owner: metadata.assigned_to || task && task.claimed_by || metadata.stage_owner || '',
+    goalId: metadata.goal_id || '',
+    missionId: metadata.mission_id || '',
+    objective: metadata.task_goal || metadata.goal_objective || metadata.stage_goal || '',
+    workspaceRoot: task && task.workspace_root || '',
+  };
+}
+
+function validateExecutorDispatch(expected = {}, task) {
+  if (!expected.taskId || !expected.owner || (!expected.goalId && !expected.missionId && !expected.objective)) {
+    return { ok: false, reason: 'missing task, owner, or mission in dispatch' };
+  }
+  const actual = executorDispatchForTask(task);
+  if (!task || ['taskId', 'owner', 'goalId', 'missionId', 'objective', 'workspaceRoot']
+    .some(key => (expected[key] || '') !== (actual[key] || ''))) {
+    return { ok: false, reason: 'task, owner, or mission changed since dispatch' };
+  }
+  if (!['open', 'claimed'].includes(task.status)
+    || (task.status === 'claimed' && task.claimed_by !== expected.owner)) {
+    return { ok: false, reason: 'task is inactive or claimed by another owner' };
+  }
+  return { ok: true };
+}
+
+function executorTaskHandoff({ taskId = '', owner = '', goalId = '', missionId = '', objective = '' } = {}) {
+  const ref = taskId || '<task-id>';
+  const expected = JSON.stringify({ taskId: taskId || null, owner: owner || null, goalId: goalId || null, missionId: missionId || null, objective: objective || null });
+  return `Expected dispatch: ${expected}. Before claiming or editing, run \`atris task show ${ref} --json\` for the exact current dispatched task. If the expected task ID, owner, or mission is missing, stop; no edits are allowed. Do not select another displayed row. Check the ID, current mission, active status (open or claimed by the same owner), and functional owner against these expected values. Refuse a stale or mismatched task. Read the raw metadata, requirements, events, and verify command for exact paths, flags, and engine/model instructions; the explanation and rendered TODO are summaries only. Then claim that same task with \`atris task claim ${ref} --as <task-owner>\`, using its recorded functional owner and keeping the engine separate.`;
+}
+
+// The executor prompt sent to a backend agent in --execute mode. Kept as a
+// pure function so the emitted instructions can be tested without a network:
+// the agent claims and finishes work through the live task plane, and treats
+// atris/TODO.md as a generated view it never hand-edits.
+function executorAgentPrompt({ filteredTasks = '', taskSource = 'atris/TODO.md', context = 'UNKNOWN', taskId = '', owner = '', goalId = '', missionId = '', objective = '' } = {}) {
+  let userPrompt = `⚠️ CRITICAL: Execute tasks NOW. Use file tools to edit code, terminal to run commands.\n\n`;
+  userPrompt += `You are the Executor. Get it done, precisely, following instructions perfectly.\n\n`;
+
+  if (filteredTasks) {
+    userPrompt += `## REFERENCE TASK SUMMARIES (generated view from ${taskSource}; live truth is \`atris task list\`):\n${filteredTasks}\n\n`;
+  } else {
+    userPrompt += `## TASKS TO EXECUTE:\n(No tasks found - run \`atris task list\` for the live task plane)\n\n`;
+  }
+
+  userPrompt += `Your process (EXECUTE these steps):\n`;
+  userPrompt += `1. ${executorTaskHandoff({ taskId, owner, goalId, missionId, objective })}\n`;
+  userPrompt += `2. For this task: Show ASCII visualization first (especially complex changes)\n`;
+  userPrompt += `3. Run the Confidence Gate before editing\n`;
+  userPrompt += confidenceGatePrompt('do') + `\n`;
+  userPrompt += `4. Execute task: Use file edit tools, terminal commands, etc.\n`;
+  userPrompt += `5. Before completion, rerun the gate against proof and residual risk\n`;
+  userPrompt += `6. Send it to review: \`atris task ready <id> --proof "<commands run>"\`; a human accepts. Never hand-edit TODO.md; \`atris task render --out atris/TODO.md\` regenerates it\n`;
+  userPrompt += `7. Log to atris/team/executor/logs/YYYY-MM-DD.md\n`;
+  userPrompt += `   (Task, Delivered, Errors hit, Learned)\n`;
+  userPrompt += `8. Use MAP.md to navigate codebase\n\n`;
+  userPrompt += `DO NOT just describe what you would do - actually edit files and execute commands!\n`;
+  userPrompt += `Context: ${context}\n`;
+  userPrompt += `Start only the dispatched task after the raw-record check.`;
+  return userPrompt;
 }
 
 async function doAtris() {
@@ -1097,13 +1165,13 @@ async function doAtris() {
       console.log('');
     }
     console.log('Workflow:');
-    console.log('1) Read atris/TODO.md, then claim next unclaimed Backlog task');
-    console.log('   Move to ## In Progress: add "Claimed by: executor at YYYY-MM-DD HH:MM"');
+    console.log(`1) ${executorTaskHandoff(executorDispatchForTask(firstMinute && firstMinute.task))}`);
+    console.log('   The live task plane is truth; never hand-edit TODO.md to claim or move work');
     console.log('2) Run the Confidence Gate against the task before editing');
     printConfidenceGate('   ');
     console.log('3) Execute step-by-step. Run tests as you go.');
     console.log('4) Before completion, rerun the gate against proof and residual risk');
-    console.log('5) When done, move task to ## Completed');
+    console.log('5) When done, send it to review: `atris task ready <id> --proof "<commands run>"`; a human accepts, then `atris task render --out atris/TODO.md` refreshes the view');
     console.log('6) Log to atris/team/executor/logs/YYYY-MM-DD.md');
     console.log('   (Task, Delivered, Errors hit, Learned)');
     console.log('');
@@ -1146,6 +1214,10 @@ async function doAtris() {
 
   // Check execution mode
   if (executionMode === 'agent') {
+    // Bind edit permission to the selected live task, not its rendered summary.
+    const dispatch = executorDispatchForTask(firstMinute && firstMinute.task);
+    const dispatchCheck = validateExecutorDispatch(dispatch, firstMinute && firstMinute.task);
+    if (!dispatchCheck.ok) throw new Error(`executor dispatch refused: ${dispatchCheck.reason}`);
     // Agent mode: execute via backend API
     if (!config.agent_id) {
       throw new Error('No agent selected. Run "atris agent" first.');
@@ -1175,29 +1247,11 @@ async function doAtris() {
     }
 
     // Build user prompt with context
-    let userPrompt = `⚠️ CRITICAL: Execute tasks NOW. Use file tools to edit code, terminal to run commands.\n\n`;
-    userPrompt += `You are the Executor. Get it done, precisely, following instructions perfectly.\n\n`;
-
-    if (filteredTasks) {
-      userPrompt += `## TASKS TO EXECUTE (from ${taskSource}):\n${filteredTasks}\n\n`;
-    } else {
-      userPrompt += `## TASKS TO EXECUTE:\n(No tasks found - check TODO.md)\n\n`;
-    }
-
-    userPrompt += `Your process (EXECUTE these steps):\n`;
-    userPrompt += `1. Read tasks from TODO.md (shown above)\n`;
-    userPrompt += `2. For each task: Show ASCII visualization first (especially complex changes)\n`;
-    userPrompt += `3. Run the Confidence Gate before editing\n`;
-    userPrompt += confidenceGatePrompt('do') + `\n`;
-    userPrompt += `4. Execute task: Use file edit tools, terminal commands, etc.\n`;
-    userPrompt += `5. Before completion, rerun the gate against proof and residual risk\n`;
-    userPrompt += `6. Move task to ## Completed in TODO.md\n`;
-    userPrompt += `7. Log to atris/team/executor/logs/YYYY-MM-DD.md\n`;
-    userPrompt += `   (Task, Delivered, Errors hit, Learned)\n`;
-    userPrompt += `8. Use MAP.md to navigate codebase\n\n`;
-    userPrompt += `DO NOT just describe what you would do - actually edit files and execute commands!\n`;
-    userPrompt += `Context: ${context}\n`;
-    userPrompt += `Start executing tasks now.`;
+    const taskDb = require('../lib/task-db');
+    const liveTask = taskDb.getTask(taskDb.open(), dispatch.taskId);
+    const currentDispatchCheck = validateExecutorDispatch(dispatch, liveTask);
+    if (!currentDispatchCheck.ok) throw new Error(`executor dispatch refused: ${currentDispatchCheck.reason}`);
+    const userPrompt = executorAgentPrompt({ filteredTasks, taskSource, context, ...dispatch });
 
     console.log('');
     console.log('🤖 AGENT MODE: Executing via backend API...');
@@ -1844,6 +1898,9 @@ module.exports = {
   doAtris,
   reviewAtris,
   renderReviewMinute,
+  executorAgentPrompt,
+  executorDispatchForTask,
+  validateExecutorDispatch,
   executeAgentSDKFast,
   makeCloudExecutor,
   postToolResult

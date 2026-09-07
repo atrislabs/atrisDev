@@ -43,6 +43,27 @@ node --test test/self-driving-mission.test.js test/mission-status.test.js test/f
 
 ---
 
+## 3b. Bounded repair gate: delegation owner and handoff fidelity
+
+Source tasks `01M1X95C2K51HKNTW7CC51HKNT`, `01M1X96ZZ6CD9NENF4DJCD9NEN`; backend packet `01M1X8MVRS8W3PQ86SV68W3PQ8`. Run bare:
+
+```bash
+node --test test/task-plan-owner.test.js test/task-explanation.test.js test/workflow-delegation.test.js
+git diff --check
+```
+
+- **Expect:** exit code 0 for both.
+- [ ] `task delegate --to mission-lead` then `task plan` without `--owner` keeps `plan_trace.owner_choice.owner`, `metadata.stage_owner`, and `metadata.assigned_to` all `mission-lead`.
+- [ ] `task plan --owner architect` on that task moves all three to `architect`.
+- [ ] An unassigned task still gets automatic team choice (`owner_source: team`).
+- [ ] A claimed task refuses `plan` from another actor or with another `--owner` (`claimed_by_other`).
+- [ ] `delegate --what-changes ... --verify ...` -> `plan` -> `show --json` keeps exact paths, flags, engine/model, and merge/queue strings in `metadata` and the `created` event; `explanation.what_changes` has none of them.
+- [ ] Expected owner and separate goal/mission references appear in both executor prompts. Missing values, changed real task records, inactive rows, and foreign claims fail the pre-edit check; incomplete dispatch stops before credentials or edit tools.
+- [ ] A rendered TODO row omitting the owner and path still yields a prompt that requires the exact dispatched task JSON before claim/edit; stale or mismatched tasks are refused.
+- [ ] `atris plan --prompt`, `atris do --prompt`, and `executorAgentPrompt()` name `atris task add/plan/claim/ready`, call TODO.md a generated view, and never suggest `atris task accept`.
+
+---
+
 ## 4. Safety Regression
 
 - [ ] Destination changes require operator approval.

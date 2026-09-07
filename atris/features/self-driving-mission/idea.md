@@ -112,6 +112,18 @@ Keshav gives Atris the outcome instead of managing a queue of agents. He can wat
 
 ---
 
+## Bounded repair: delegation owner and handoff fidelity (2026-09-07)
+
+Before any route graph exists, one leg has to hold: when a person or member delegates a task, the owner and the exact instructions must survive planning, and generated agent prompts must send agents through the live task plane. This repair is scoped to that leg and does not build the broker or route compiler.
+
+- Source: backend packet `01M1X8MVRS8W3PQ86SV68W3PQ8` (owned by the parent, not edited here); CLI tasks `01M1X95C2K51HKNTW7CC51HKNT` (owner and instruction fidelity) and `01M1X96ZZ6CD9NENF4DJCD9NEN` (generated workflow cleanup).
+- Contract: a delegated owner outranks automatic team choice; only an explicit `--owner` or an existing claim moves it, and plan trace, stage owner, and assignee always agree.
+- Contract: the plain explanation is for people; metadata and events keep every path, flag, engine, and model string exactly.
+- Contract: `atris plan` / `atris do` prompts and the `--execute` executor prompt use `atris task add/plan/delegate/claim/ready`; `atris/TODO.md` is a generated view and human accept stays human.
+- Engine pilot: scout agy gemini-3.8-flash-low, coder fable claude-fable-5-1, reviewer agy gemini-3.8-flash-high; the coder ran no further engine dispatch.
+
+---
+
 ## Technical Notes
 
 - Extend `commands/mission.js` route state instead of creating a parallel mission database.

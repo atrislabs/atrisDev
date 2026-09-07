@@ -154,6 +154,75 @@ test('central task creation stores a plain face without changing full-fidelity t
   }
 });
 
+// Delegate -> plan -> show through the real CLI. The plain explanation may
+// drop paths, flags, and engine names for people, but the stored metadata and
+// event payloads must keep every exact machine instruction byte for byte.
+// Source task: 01M1X95C2K51HKNTW7CC51HKNT.
+test('delegated handoff instructions survive plan exactly while the explanation stays plain', () => {
+  const root = tempWorkspace();
+  const dbPath = path.join(root, '.atris', 'state', 'tasks.db');
+  const title = 'Route the pilot through atris/skills/engines/SKILL.md';
+  const whatChanges = 'Edit atris/skills/engines/SKILL.md and lib/runner-command.js; dispatch engine=agy model=gemini-3.8-flash-high with --owner mission-lead; merge only after the queued review passes';
+  const doneLooksLike = 'node --test test/task-explanation.test.js passes and the merge queue shows the branch as merged, not draft';
+  const verify = 'node --test test/task-explanation.test.js';
+
+  try {
+    const delegated = runTaskCli(root, dbPath, [
+      'delegate', title,
+      '--to', 'mission-lead',
+      '--tag', 'capture',
+      '--what-changes', whatChanges,
+      '--why-it-matters', 'Delegated coding needs one exact handoff',
+      '--done-looks-like', doneLooksLike,
+      '--verify', verify,
+      '--json',
+    ]);
+    assert.equal(delegated.status, 0, delegated.stderr || delegated.stdout);
+    const ref = JSON.parse(delegated.stdout).task.display_id;
+
+    const planned = runTaskCli(root, dbPath, [
+      'plan', ref,
+      '--goal', 'Keep the exact handoff through planning',
+      '--exit', 'metadata and events keep the exact strings',
+      '--json',
+    ]);
+    assert.equal(planned.status, 0, planned.stderr || planned.stdout);
+    assert.equal(JSON.parse(planned.stdout).plan_trace.owner_choice.owner, 'mission-lead');
+
+    const shown = runTaskCli(root, dbPath, ['show', ref, '--json']);
+    assert.equal(shown.status, 0, shown.stderr || shown.stdout);
+    const task = JSON.parse(shown.stdout);
+
+    // Raw machine instructions: exact.
+    assert.equal(task.title, title);
+    assert.equal(task.metadata.what_changes, whatChanges);
+    assert.equal(task.metadata.done_looks_like, doneLooksLike);
+    assert.equal(task.metadata.verify, verify);
+    assert.equal(task.metadata.proof_needed, verify);
+    assert.equal(task.metadata.assigned_to, 'mission-lead');
+    assert.equal(task.metadata.stage_owner, 'mission-lead');
+    const created = task.events.find(event => event.event_type === 'created');
+    assert.equal(created.payload.metadata.what_changes, whatChanges);
+    assert.equal(created.payload.metadata.done_looks_like, doneLooksLike);
+    assert.equal(created.payload.metadata.assigned_to, 'mission-lead');
+
+    // Human explanation: plain, separate, and never the machine source.
+    assert.equal(task.explanation.sources.what_changes, 'explicit');
+    assert.doesNotMatch(task.explanation.what_changes, /atris\/skills\/engines\/SKILL\.md|lib\/runner-command\.js|--owner/);
+    assert.match(task.explanation.what_changes, /the named file/);
+    assert.doesNotMatch(task.explanation.done_looks_like, /node --test|test\/task-explanation/);
+    assert.match(task.explanation.done_looks_like, /merged, not draft/);
+
+    // The plain text view shows the plain face first and the exact record under it.
+    const text = runTaskCli(root, dbPath, ['show', ref]);
+    assert.equal(text.status, 0, text.stderr || text.stdout);
+    assert.ok(text.stdout.indexOf('What changes:') < text.stdout.indexOf('Technical details:'));
+    assert.match(text.stdout, /atris\/skills\/engines\/SKILL\.md/);
+  } finally {
+    cleanup(root);
+  }
+});
+
 test('legacy tasks receive honest plain defaults at presentation time', () => {
   const root = tempWorkspace();
   const dbPath = path.join(root, '.atris', 'state', 'tasks.db');
