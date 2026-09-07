@@ -1,7 +1,7 @@
 ---
 name: youtube
 description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 the CLI already retries; use cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.16.0
+version: 2.17.0
 tags:
   - youtube
   - research
@@ -47,8 +47,8 @@ search QUERY (free)
 
 watch add --> next: atris youtube watch tick
 watch tick --> briefs new videos
-           --> if briefed: rich pack-named apply + failing measure.py (score 0), then next: experiments keep
-           -->            thin: check: fill this, then next: atris youtube teach <first-briefed-url>
+           --> if briefed: first rich brief mints pack-named apply + failing measure.py (score 0), then next: experiments keep
+           -->            all thin: check: fill this, then next: atris youtube teach <first-briefed-url>
            --> 0 briefed, no channels: next: atris youtube watch add <channel-url-or-@handle>
            --> 0 briefed, channels exist: next: atris youtube search " "
 

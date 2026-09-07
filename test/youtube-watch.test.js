@@ -10,6 +10,7 @@ const {
   parseFlatPlaylist,
   loadWatchState,
   watchExperimentSlug,
+  firstRichWatchLesson,
   LEARNER_CHECK_FILL,
   LEARNER_SCORE_ZERO,
   youtubeCommand,
@@ -417,6 +418,118 @@ test('tick that briefed a thin lesson prints fill-this then teach next', async (
     out.lines.indexOf(`check: ${LEARNER_CHECK_FILL}`)
       < out.lines.indexOf(teachNext),
   );
+  assert.deepEqual(
+    out.text().split('\n').filter((line) => line.startsWith('next:')),
+    [teachNext],
+  );
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'watch-thin1.apply.md')), false);
+});
+
+test('firstRichWatchLesson skips a thin brief and keeps the first rich url', () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-watch-rich-pick-'));
+  fs.writeFileSync(path.join(workDir, 'yt_thin1.md'), '# Chat\n\nwelcome back friends this is just a chat\n');
+  fs.writeFileSync(path.join(workDir, 'yt_rich1.md'), 'TSMC prints at 2nm\n');
+  fs.writeFileSync(path.join(workDir, 'yt_rich2.md'), 'The omakase model has 80 people.\n');
+
+  const picked = firstRichWatchLesson([
+    'https://www.youtube.com/watch?v=thin1',
+    'https://www.youtube.com/watch?v=rich1',
+    'https://www.youtube.com/watch?v=rich2',
+  ], workDir);
+  assert.equal(picked.url, 'https://www.youtube.com/watch?v=rich1');
+  assert.equal(picked.lesson.mechanisms.includes('2nm'), true);
+
+  assert.equal(firstRichWatchLesson([
+    'https://www.youtube.com/watch?v=thin1',
+  ], workDir), null);
+});
+
+test('tick that briefs thin then rich mints apply from the rich video', async () => {
+  const cwd = tempCwd();
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-watch-notes-'));
+  const now = '2026-08-15T19:40:00.000Z';
+  await youtubeCommand(['watch', 'add', '@veritasium'], { cwd, now, output: () => {} });
+  await youtubeCommand(['watch', 'tick'], {
+    cwd,
+    workDir,
+    now,
+    output: () => {},
+    fetcher: () => [{ id: 'seed1', title: 'Seed' }],
+    runner: () => ({ status: 0 }),
+    briefFiler: () => {},
+  });
+  fs.writeFileSync(path.join(workDir, 'yt_thin1.md'), '# Chat\n\nwelcome back friends this is just a chat\n');
+  fs.writeFileSync(path.join(workDir, 'yt_rich1.md'), 'TSMC prints at 2nm\n');
+
+  const out = collect();
+  const status = await youtubeCommand(['watch', 'tick'], {
+    cwd,
+    workDir,
+    now,
+    output: out.output,
+    fetcher: () => [
+      { id: 'thin1', title: 'Chat' },
+      { id: 'rich1', title: 'Process' },
+      { id: 'seed1', title: 'Seed' },
+    ],
+    runner: () => ({ status: 0 }),
+    briefFiler: () => {},
+  });
+
+  const keepNext = 'next: atris experiments keep watch-rich1';
+  assert.equal(status, 0);
+  assert.match(out.text(), /total: 2 new, 2 briefed/);
+  assert.equal(out.lines.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.doesNotMatch(out.text(), /^check:/m);
+  assert.deepEqual(
+    out.text().split('\n').filter((line) => line.startsWith('next:')),
+    [keepNext],
+  );
+  assert.doesNotMatch(out.text(), /next: atris youtube teach/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'watch-thin1')), false);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'watch-thin1.apply.md')), false);
+  const claim = assertWatchApplyClaimable(cwd, { id: 'rich1', tokens: ['2nm', 'what is 2nm?'] });
+  assert.equal(fs.existsSync(path.join(cwd, claim.packRel, 'measure.py')), true);
+});
+
+test('tick that briefs two thin videos stays on the first teach next', async () => {
+  const cwd = tempCwd();
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-watch-notes-'));
+  const now = '2026-08-15T19:41:00.000Z';
+  await youtubeCommand(['watch', 'add', '@veritasium'], { cwd, now, output: () => {} });
+  await youtubeCommand(['watch', 'tick'], {
+    cwd,
+    workDir,
+    now,
+    output: () => {},
+    fetcher: () => [{ id: 'seed1', title: 'Seed' }],
+    runner: () => ({ status: 0 }),
+    briefFiler: () => {},
+  });
+  fs.writeFileSync(path.join(workDir, 'yt_thin1.md'), '# Chat\n\nwelcome back friends this is just a chat\n');
+  fs.writeFileSync(path.join(workDir, 'yt_thin2.md'), '# Hello\n\njust vibes and feelings today\n');
+
+  const out = collect();
+  const status = await youtubeCommand(['watch', 'tick'], {
+    cwd,
+    workDir,
+    now,
+    output: out.output,
+    fetcher: () => [
+      { id: 'thin1', title: 'Chat' },
+      { id: 'thin2', title: 'Hello' },
+      { id: 'seed1', title: 'Seed' },
+    ],
+    runner: () => ({ status: 0 }),
+    briefFiler: () => {},
+  });
+
+  const teachNext = 'next: atris youtube teach "https://www.youtube.com/watch?v=thin1"';
+  assert.equal(status, 0);
+  assert.match(out.text(), /total: 2 new, 2 briefed/);
+  assert.equal(out.lines.filter((line) => line === `check: ${LEARNER_CHECK_FILL}`).length, 1);
+  assert.equal(out.lines.includes(LEARNER_SCORE_ZERO), false);
   assert.deepEqual(
     out.text().split('\n').filter((line) => line.startsWith('next:')),
     [teachNext],

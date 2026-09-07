@@ -1082,6 +1082,15 @@ function ensureWatchApply({ cwd, url, packRel, now, output, source } = {}) {
   });
 }
 
+function firstRichWatchLesson(urls, workDir) {
+  for (const url of Array.isArray(urls) ? urls : []) {
+    if (!url) continue;
+    const lesson = notesLessonFromText(readNotesText({ url, workDir }));
+    if (!isThinTeachLesson(lesson)) return { url, lesson };
+  }
+  return null;
+}
+
 function saveRichWatch({ cwd, url, lesson } = {}) {
   if (isThinTeachLesson(lesson)) {
     return { thin: true, packRel: null, lesson };
@@ -1420,6 +1429,7 @@ async function tickWatch(deps = {}) {
   let totalNew = 0;
   let totalBriefed = 0;
   let firstBriefedUrl = null;
+  const briefedUrls = [];
 
   for (const row of state.channels) {
     const videosUrl = channelVideosUrl(row.channel);
@@ -1466,6 +1476,7 @@ async function tickWatch(deps = {}) {
       }
       markSeen(state, row.channel, video.id, timestamp);
       briefed += 1;
+      briefedUrls.push(url);
       if (!firstBriefedUrl) firstBriefedUrl = url;
     }
 
@@ -1485,33 +1496,34 @@ async function tickWatch(deps = {}) {
   output(`total: ${totalNew} new, ${totalBriefed} briefed`);
   saveWatchState(statePath, state);
   if (totalBriefed > 0) {
-    if (firstBriefedUrl) {
-      const lesson = notesLessonFromText(readNotesText({ url: firstBriefedUrl, workDir }));
-      if (isThinTeachLesson(lesson)) {
-        printLearnerCheckGate(output, lesson, { includeCheck: true });
-        printYoutubeTeachNext(firstBriefedUrl, {}, output);
-        return 0;
-      }
-      const saved = saveRichWatch({ cwd, url: firstBriefedUrl, lesson });
+    const rich = firstRichWatchLesson(briefedUrls, workDir);
+    if (rich) {
+      const saved = saveRichWatch({ cwd, url: rich.url, lesson: rich.lesson });
       const ensureApply = deps.ensureApply || ensureWatchApply;
       const applyCode = ensureApply({
         cwd,
-        url: firstBriefedUrl,
+        url: rich.url,
         packRel: saved.packRel,
         now,
         output,
-        source: firstBriefedUrl,
+        source: rich.url,
       });
       if (deps.ensureApply) return applyCode;
-      const id = videoIdFromUrl(firstBriefedUrl);
+      const id = videoIdFromUrl(rich.url);
       const baseline = proveSavedLearnerBaseline({
         cwd,
         applyRel: id ? watchApplyRel(id) : null,
-        lesson,
+        lesson: rich.lesson,
         output,
       });
       if (baseline !== 0) return baseline;
       return applyCode;
+    }
+    if (firstBriefedUrl) {
+      const lesson = notesLessonFromText(readNotesText({ url: firstBriefedUrl, workDir }));
+      printLearnerCheckGate(output, lesson, { includeCheck: true });
+      printYoutubeTeachNext(firstBriefedUrl, {}, output);
+      return 0;
     }
     printYoutubeTeachNext(firstBriefedUrl, {}, output);
     return 0;
@@ -3556,6 +3568,7 @@ module.exports = {
   notesExperimentSlug,
   digestExperimentSlug,
   watchExperimentSlug,
+  firstRichWatchLesson,
   fileTeachExperiment,
   youtubeCommand,
 };
