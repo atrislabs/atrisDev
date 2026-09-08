@@ -3710,7 +3710,5 @@ module.exports = {
   processApplyRel,
   firstRichWatchLesson,
   fileTeachExperiment,
-  saveRichProcess,
-  mintRichProcess,
   youtubeCommand,
 };
