@@ -417,6 +417,50 @@ function parseYtDlpInfoJson(result) {
   }
 }
 
+function localCaptionNames(id) {
+  return [
+    `yt_${id}.en.vtt`,
+    `yt_${id}.en-orig.vtt`,
+    `yt_${id}.en-US.vtt`,
+    `yt_${id}.en-GB.vtt`,
+    `yt_${id}.clean.txt`,
+  ];
+}
+
+function readLocalCaptionText({ url, id, workDir } = {}) {
+  const videoId = id || videoIdFromUrl(url);
+  if (!videoId || !workDir) return '';
+  for (const name of localCaptionNames(videoId)) {
+    const abs = path.join(workDir, name);
+    try {
+      if (!fs.existsSync(abs)) continue;
+      const text = fs.readFileSync(abs, 'utf8');
+      if (String(text).trim()) return text;
+    } catch {
+      // try the next written caption file
+    }
+  }
+  return '';
+}
+
+async function loadCaptionRaw(info, youtubeUrl, deps = {}) {
+  const selected = chooseCaptionTrack(info);
+  let raw = '';
+  if (selected?.track?.url) {
+    raw = await (deps.fetchCaptionText || fetchCaptionText)(selected.track.url);
+  }
+  if (String(raw || '').trim()) {
+    return { raw, language: selected?.language || 'unknown' };
+  }
+  const local = readLocalCaptionText({
+    url: youtubeUrl,
+    id: info && info.id,
+    workDir: deps.workDir,
+  });
+  if (!String(local || '').trim()) return null;
+  return { raw: local, language: selected?.language || 'en' };
+}
+
 async function extractLocalTranscript(youtubeUrl, deps = {}) {
   if (process.env.ATRIS_YOUTUBE_LOCAL_TRANSCRIPT === '0') return null;
   const runner = deps.spawnSync || spawnSync;
@@ -428,15 +472,13 @@ async function extractLocalTranscript(youtubeUrl, deps = {}) {
   const info = parseYtDlpInfoJson(result);
   if (!info) return null;
 
-  const selected = chooseCaptionTrack(info);
-  if (!selected?.track?.url) return null;
-  const rawCaption = await (deps.fetchCaptionText || fetchCaptionText)(selected.track.url);
-  const transcript = parseCaptionText(rawCaption);
+  const loaded = await loadCaptionRaw(info, youtubeUrl, deps);
+  const transcript = parseCaptionText(loaded && loaded.raw);
   if (!transcript) return null;
 
   return {
     transcriptText: transcript.slice(0, LOCAL_TRANSCRIPT_MAX_CHARS),
-    language: selected.language || 'unknown',
+    language: loaded.language || 'unknown',
     durationSeconds: Number(info.duration || 0) || undefined,
   };
 }
@@ -489,7 +531,10 @@ async function processYoutube(options, deps = {}) {
   const localExtractor = deps.extractLocalTranscript || extractLocalTranscript;
   let localTranscript = null;
   try {
-    localTranscript = await localExtractor(options.youtubeUrl, deps);
+    localTranscript = await localExtractor(options.youtubeUrl, {
+      ...deps,
+      workDir: deps.workDir || notesWorkDir(deps),
+    });
   } catch {
     localTranscript = null;
   }
@@ -3446,10 +3491,8 @@ async function extractTeachSource(youtubeUrl, deps = {}) {
   const info = parseYtDlpInfoJson(result);
   if (!info) return null;
 
-  const selected = chooseCaptionTrack(info);
-  if (!selected?.track?.url) return null;
-  const rawCaption = await (deps.fetchCaptionText || fetchCaptionText)(selected.track.url);
-  const cues = parseCaptionCues(rawCaption);
+  const loaded = await loadCaptionRaw(info, youtubeUrl, deps);
+  const cues = parseCaptionCues(loaded && loaded.raw);
   if (!cues.length) return null;
 
   return {
@@ -3457,7 +3500,7 @@ async function extractTeachSource(youtubeUrl, deps = {}) {
     title: info.title || '',
     url: youtubeUrl,
     durationSeconds: Number(info.duration || 0) || undefined,
-    language: selected.language || 'unknown',
+    language: loaded.language || 'unknown',
     chapters: normalizeChapters(info.chapters, info.duration),
     cues,
   };
@@ -3508,7 +3551,10 @@ async function runYoutubeTeach(args = [], deps = {}) {
     }
   }
 
-  const source = await (deps.extractTeachSource || extractTeachSource)(parsed.url, deps);
+  const source = await (deps.extractTeachSource || extractTeachSource)(parsed.url, {
+    ...deps,
+    workDir: deps.workDir || notesWorkDir(deps),
+  });
   if (!source || !Array.isArray(source.cues) || !source.cues.length) {
     output('no english captions for this url. teach stays local and will not call process.');
     return 2;
@@ -3691,6 +3737,7 @@ module.exports = {
   extractTeachNumbers,
   extractTeachMechanisms,
   extractTeachSource,
+  readLocalCaptionText,
   oneTeachCheck,
   learnerCheckFromLesson,
   scoreLearnerNeedles,

@@ -9,6 +9,7 @@ const {
   parseYoutubeArgs,
   buildYoutubePayload,
   extractLocalTranscript,
+  readLocalCaptionText,
   shouldRetryWithLocalTranscript,
   formatYoutubeResult,
   fileBriefFromNotes,
@@ -366,6 +367,63 @@ test('extractLocalTranscript still fails when 429 stdout is empty', async () => 
   });
 
   assert.equal(result, null);
+});
+
+test('extractLocalTranscript keeps a written vtt when caption fetch fails after 429 json', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-local-vtt-'));
+  fs.writeFileSync(path.join(workDir, 'yt_abc123.en.vtt'), [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:02.000',
+    'Hello world',
+    '',
+    '00:00:01.200 --> 00:00:03.000',
+    'Next idea',
+    '',
+  ].join('\n'));
+
+  const result = await extractLocalTranscript('https://youtube.com/watch?v=abc123', {
+    workDir,
+    spawnSync: () => ({
+      status: 1,
+      stdout: JSON.stringify({
+        id: 'abc123',
+        duration: 44,
+        automatic_captions: {
+          en: [{ ext: 'json3', url: 'https://www.youtube.com/api/timedtext?v=abc123' }],
+        },
+      }),
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => null,
+  });
+
+  assert.equal(result.transcriptText, '[00:00] Hello world\n[00:01] Next idea');
+  assert.equal(result.language, 'en');
+  assert.equal(result.durationSeconds, 44);
+  assert.match(readLocalCaptionText({ url: 'https://youtube.com/watch?v=abc123', workDir }), /Hello world/);
+});
+
+test('extractLocalTranscript still fails when caption fetch fails and no vtt was written', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-local-novtt-'));
+  const result = await extractLocalTranscript('https://youtube.com/watch?v=abc123', {
+    workDir,
+    spawnSync: () => ({
+      status: 1,
+      stdout: JSON.stringify({
+        id: 'abc123',
+        duration: 44,
+        automatic_captions: {
+          en: [{ ext: 'json3', url: 'https://www.youtube.com/api/timedtext?v=abc123' }],
+        },
+      }),
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => null,
+  });
+
+  assert.equal(result, null);
+  assert.equal(readLocalCaptionText({ url: 'https://youtube.com/watch?v=abc123', workDir }), '');
 });
 
 test('extractLocalTranscript preserves VTT timestamps', async () => {
