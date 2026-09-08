@@ -60,10 +60,10 @@ test('receipt block renders all four surfaces deterministically', () => {
 
   assert.deepEqual(renderCard(receipt), {
     kind: 'statement',
-    headline: 'receipt block renders the proof once',
-    text: 'receipt block renders the proof once',
-    kicker: 'proof_ready mission receipt',
-    sub: '4 changed files; behavior checks passed',
+    headline: 'Receipt block renders the proof once.',
+    text: 'Receipt block renders the proof once.',
+    kicker: 'mission receipt',
+    sub: 'Check it: behavior checks passed',
     brand: 'atris',
     size: 'og',
     theme: 'atris',
@@ -71,20 +71,19 @@ test('receipt block renders all four surfaces deterministically', () => {
   assert.equal(renderPageSection(receipt), [
     '## mission receipt',
     '',
-    '- what: receipt block renders the proof once',
-    '- how big: 4 changed files',
-    '- how we know: behavior checks passed',
-    '- status: proof_ready',
-    '- mission: mission-receipt-block',
-    '- next: ship the receipt block',
+    'Receipt block renders the proof once.',
+    'Check it: behavior checks passed.',
+    'Next: Ship the receipt block.',
+    '',
+    'details: 4 changed files; status proof_ready; mission mission-receipt-block',
   ].join('\n'));
   assert.equal(
     renderEmailLine(receipt),
-    'receipt block renders the proof once; 4 changed files; we know because behavior checks passed.',
+    'Receipt block renders the proof once. Check it: behavior checks passed.',
   );
   assert.equal(
     renderMorningCardRow(receipt),
-    '- mission: receipt block renders the proof once; 4 changed files; we know because behavior checks passed',
+    '- Receipt block renders the proof once. Check it: behavior checks passed',
   );
 });
 
@@ -108,9 +107,42 @@ test('mission proof renders as a direct passed fact instead of first-person proc
 
   assert.equal(
     renderEmailLine(receipt),
-    'receipt block renders the proof once; 4 changed files; we know because the behavior checks passed.',
+    'Receipt block renders the proof once. Check it: the behavior checks passed.',
   );
   assert.doesNotMatch(renderMorningCardRow(receipt), /\bi ran\b/i);
+});
+
+test('a link wins the check line and stays bare so it copies clean', () => {
+  const receipt = fixtureReceipt();
+  receipt.result.landing.checked = 'Live at https://github.com/atris/atrisos-web/pull/412 now.';
+  assert.equal(
+    renderEmailLine(receipt),
+    'Receipt block renders the proof once. Check it: https://github.com/atris/atrisos-web/pull/412',
+  );
+
+  const explicit = fixtureReceipt();
+  explicit.result.landing.link = 'https://snowpine.atris.ai/book';
+  assert.match(renderPageSection(explicit), /^Check it: https:\/\/snowpine\.atris\.ai\/book$/m);
+  assert.equal(renderCard(explicit).sub, 'Check it: https://snowpine.atris.ai/book');
+});
+
+test('receipt surface never leads with machinery words', () => {
+  const receipt = fixtureReceipt();
+  delete receipt.result.landing.checked;
+  delete receipt.result.landing.tested;
+  const surfaces = [renderEmailLine(receipt), renderMorningCardRow(receipt), renderCard(receipt).sub];
+  for (const line of surfaces) {
+    assert.doesNotMatch(line, /verifier|receipt says|receipt is present|we know because|task_id|tick\b/i);
+  }
+  // With only a verifier result, the check names the command that passed, in plain words.
+  assert.equal(
+    renderEmailLine(receipt),
+    'Receipt block renders the proof once. Check it: node --test test/receipt-block.test.js passed.',
+  );
+
+  const bare = { objective: 'Login now blocks anyone without an invite', result: { passed: true } };
+  assert.equal(renderEmailLine(bare), 'Login now blocks anyone without an invite. Check it: the checks passed.');
+  assert.equal(renderEmailLine({ objective: 'Nothing checked', result: {} }), 'Nothing checked.');
 });
 
 test('morning card shows mission receipt rows through the receipt block renderer', () => {
@@ -129,7 +161,7 @@ test('morning card shows mission receipt rows through the receipt block renderer
 
     assert.match(
       content,
-      /- mission: receipt block renders the proof once; 4 changed files; we know because behavior checks passed/,
+      /- Receipt block renders the proof once\. Check it: behavior checks passed/,
     );
     assert.match(content, /Completed receipts today: 1/);
   } finally {
