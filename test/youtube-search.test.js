@@ -201,8 +201,8 @@ test('youtube --help lists paid search', async () => {
   assert.match(text, /search --paid/);
   assert.match(text, /5 credits, watch permalinks/);
   assert.match(text, /rich free search writes one apply and a failing keep\/revert pack/);
-  assert.match(text, /rich paid search prints one failing check/);
-  assert.match(text, /hands off to teach/);
+  assert.match(text, /rich paid search writes one apply and a failing keep\/revert pack/);
+  assert.match(text, /thin hands off to teach/);
 });
 
 test('youtube search prints youtu.be links from mocked runner', async () => {
@@ -1065,10 +1065,13 @@ test('youtube search --paid posts /youtube/search and prints titles, permalinks,
   assert.equal(output.includes(WATCH_TICK_NEXT), false);
 });
 
-test('youtube search --paid prints a failing check from a rich title', async () => {
+test('youtube search --paid prints keep next and score 0 after a rich title', async () => {
+  const cwd = searchWorkspace();
   const output = [];
   const status = await youtubeCommand(['search', '--paid', 'omakase'], {
     ...cacheDeps(),
+    cwd,
+    now: '2026-09-08',
     output: (line) => output.push(line),
     ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
     apiRequestJson: async () => ({
@@ -1091,29 +1094,115 @@ test('youtube search --paid prints a failing check from a rich title', async () 
   });
 
   assert.equal(status, 0);
-  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.match(output.join('\n'), /37signals uses the omakase model/);
+  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 0);
   assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
-  assert.ok(
-    output.indexOf('check: what is the omakase model?')
-      < output.indexOf(LEARNER_SCORE_ZERO),
+  assert.deepEqual(
+    output.filter((line) => String(line).startsWith('next:')),
+    [RICH_SEARCH_KEEP],
   );
-  assert.equal(output.filter((line) => line === `check: ${LEARNER_CHECK_FILL}`).length, 0);
-  assert.equal(output.includes(APPLY_NEXT_MESSAGE), false);
-  assert.equal(output.filter((line) => String(line).startsWith('next:')).length, 1);
+  assert.ok(output.indexOf(RICH_SEARCH_KEEP) < output.indexOf(LEARNER_SCORE_ZERO));
   assert.equal(
     output.includes('next: atris youtube teach "https://www.youtube.com/watch?v=omakase1"'),
-    true,
+    false,
   );
-  assert.ok(
-    output.indexOf(LEARNER_SCORE_ZERO)
-      < output.indexOf('next: atris youtube teach "https://www.youtube.com/watch?v=omakase1"'),
-  );
+  assert.equal(output.includes(APPLY_NEXT_MESSAGE), false);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'search-omakase', 'measure.py')), true);
+  assertSearchApplyClaimable(cwd, {
+    query: 'omakase',
+    tokens: ['omakase model', 'what is the omakase model?'],
+    date: '2026-09-08',
+  });
 });
 
-test('youtube search --paid --json stays quiet on the learner check', async () => {
+test('rich paid youtube search mints a measure.py that validate.py accepts and scores 0 or 1 honestly', async () => {
+  assert.ok(pythonCmd, 'python3 is required to score the minted pack');
+  const cwd = searchWorkspace();
+  const output = [];
+  const status = await youtubeCommand(['search', '--paid', 'omakase'], {
+    ...cacheDeps(),
+    cwd,
+    now: '2026-09-08',
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    apiRequestJson: async () => ({
+      ok: true,
+      status: 200,
+      data: {
+        status: 'success',
+        credits_used: 5,
+        data: {
+          results: [
+            {
+              title: '37signals uses the omakase model',
+              url: 'https://www.youtube.com/watch?v=omakase1',
+            },
+          ],
+        },
+      },
+    }),
+  });
+
+  assert.equal(status, 0);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.match(output.join('\n'), /next: atris experiments keep search-omakase/);
+  const packDir = path.join(cwd, 'atris', 'experiments', 'search-omakase');
+  for (const name of ['program.md', 'measure.py', 'loop.py', 'reset.py', 'results.tsv']) {
+    assert.equal(fs.existsSync(path.join(packDir, name)), true, name);
+  }
+  const program = fs.readFileSync(path.join(packDir, 'program.md'), 'utf8');
+  assert.ok(program.length < 1200);
+  assert.match(program, /omakase model/);
+  const measureSrc = fs.readFileSync(path.join(packDir, 'measure.py'), 'utf8');
+  assert.match(measureSrc, /omakase model/);
+
+  const validated = spawnSync(pythonCmd, [VALIDATE_PY, packDir], { encoding: 'utf8' });
+  assert.equal(validated.status, 0, validated.stderr || validated.stdout);
+  assert.match(validated.stdout, /PASS/);
+
+  function scoreFixture(text) {
+    const fixture = path.join(cwd, 'fixture.md');
+    fs.writeFileSync(fixture, text);
+    const measured = spawnSync(pythonCmd, [path.join(packDir, 'measure.py')], {
+      cwd: packDir,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ATRIS_REPO_ROOT: cwd,
+        ATRIS_TEACH_MEASURE_FIXTURE: fixture,
+      },
+    });
+    assert.equal(measured.status, 0, measured.stderr || measured.stdout);
+    return JSON.parse(measured.stdout.trim().split('\n').pop());
+  }
+
+  const miss = scoreFixture('feelings and vibes and a chat about nothing');
+  assert.equal(miss.score, 0);
+  const hit = scoreFixture('keep the omakase model as the default stack');
+  assert.equal(hit.score, 1);
+
+  const claim = assertSearchApplyClaimable(cwd, {
+    query: 'omakase',
+    tokens: ['omakase model', 'what is the omakase model?'],
+    date: '2026-09-08',
+  });
+  const stub = spawnSync(pythonCmd, [path.join(packDir, 'measure.py')], {
+    cwd: packDir,
+    encoding: 'utf8',
+    env: { ...process.env, ATRIS_REPO_ROOT: cwd },
+  });
+  assert.equal(stub.status, 0, stub.stderr || stub.stdout);
+  const stubPayload = JSON.parse(stub.stdout.trim().split('\n').pop());
+  assert.equal(stubPayload.score, 0);
+  assert.doesNotMatch(claim.sidecar, /omakase model/i);
+});
+
+test('youtube search --paid --json stays quiet and writes no pack after a rich title', async () => {
+  const cwd = searchWorkspace();
   const output = [];
   const status = await youtubeCommand(['search', '--paid', 'omakase', '--json'], {
     ...cacheDeps(),
+    cwd,
     output: (line) => output.push(line),
     ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
     apiRequestJson: async () => ({
@@ -1139,7 +1228,10 @@ test('youtube search --paid --json stays quiet on the learner check', async () =
   assert.equal(parsed.data.results[0].title, '37signals uses the omakase model');
   assert.doesNotMatch(text, /^check:/m);
   assert.doesNotMatch(text, /score: 0/);
+  assert.doesNotMatch(text, /next: atris experiments keep/);
   assert.doesNotMatch(text, /next: atris youtube teach/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, searchApplyRel('omakase'))), false);
 });
 
 test('youtube search --paid --json prints the raw payload', async () => {
