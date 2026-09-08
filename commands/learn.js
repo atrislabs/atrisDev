@@ -159,7 +159,25 @@ function showPrune() {
   console.log('');
 }
 
-function interactiveAdd() {
+function commitAddedLearning({ type, key, insight, confidence, source, files } = {}, deps = {}) {
+  const print = typeof deps.output === 'function' ? deps.output : (line = '') => console.log(line);
+  const cwd = deps.cwd || process.cwd();
+  const entry = addLearning({ type, key, insight, confidence, source, files });
+  print('');
+  print(`  ✓ Saved: [${entry.confidence}/10] ${entry.type}/${entry.key}`);
+  print(`    "${entry.insight}"`);
+  print('');
+  const baseline = mintRichLearn({
+    cwd,
+    key: entry.key,
+    insight: entry.insight,
+    now: deps.now,
+    output: print,
+  });
+  return { entry, baseline };
+}
+
+function interactiveAdd(deps = {}) {
   const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -224,11 +242,11 @@ function interactiveAdd() {
         return;
       }
 
-      const entry = addLearning({ type, key, insight, confidence, source, files });
-      console.log('');
-      console.log(`  ✓ Saved: [${entry.confidence}/10] ${entry.type}/${entry.key}`);
-      console.log(`    "${entry.insight}"`);
-      console.log('');
+      commitAddedLearning({ type, key, insight, confidence, source, files }, {
+        cwd: deps.cwd || process.cwd(),
+        now: deps.now,
+        output: deps.output,
+      });
       rl.close();
     } catch (err) {
       console.log(`  ✗ Error: ${err.message}`);
@@ -375,12 +393,14 @@ function logDirect(jsonStr, deps = {}) {
  * Harvest learnings from journal Notes sections.
  * Scans recent journals for lines that look like insights.
  */
-function harvestFromJournals() {
-  const atrisDir = path.join(process.cwd(), 'atris');
+function harvestFromJournals(deps = {}) {
+  const print = typeof deps.output === 'function' ? deps.output : (line = '') => console.log(line);
+  const cwd = deps.cwd || process.cwd();
+  const atrisDir = path.join(cwd, 'atris');
   const logsDir = path.join(atrisDir, 'logs');
 
   if (!fs.existsSync(logsDir)) {
-    console.log('  No journals found.');
+    print('  No journals found.');
     return;
   }
 
@@ -414,10 +434,10 @@ function harvestFromJournals() {
   }
 
   if (candidates.length === 0) {
-    console.log('');
-    console.log('  No harvestable notes found in recent journals.');
-    console.log('  Add notes during "atris review" or write to ## Notes in your journal.');
-    console.log('');
+    print('');
+    print('  No harvestable notes found in recent journals.');
+    print('  Add notes during "atris review" or write to ## Notes in your journal.');
+    print('');
     return;
   }
 
@@ -427,31 +447,38 @@ function harvestFromJournals() {
   const fresh = candidates.filter(c => !existingInsights.has(c.insight.toLowerCase()));
 
   if (fresh.length === 0) {
-    console.log('');
-    console.log(`  Scanned ${candidates.length} journal notes, all already captured.`);
-    console.log('');
+    print('');
+    print(`  Scanned ${candidates.length} journal notes, all already captured.`);
+    print('');
     return;
   }
 
-  console.log('');
-  console.log(`  Found ${fresh.length} new ${fresh.length === 1 ? 'note' : 'notes'} to harvest:`);
-  console.log('');
+  print('');
+  print(`  Found ${fresh.length} new ${fresh.length === 1 ? 'note' : 'notes'} to harvest:`);
+  print('');
   for (let i = 0; i < fresh.length; i++) {
     const c = fresh[i];
     const isPitfall = /^(don't|never|avoid|watch out|careful)/i.test(c.insight);
     const type = isPitfall ? 'pitfall' : 'pattern';
     const key = c.insight.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).slice(0, 4).join('-');
-    console.log(`  ${i + 1}. [${type}] ${c.insight}`);
-    console.log(`     from: ${c.source}`);
+    print(`  ${i + 1}. [${type}] ${c.insight}`);
+    print(`     from: ${c.source}`);
 
     try {
-      addLearning({ type, key, insight: c.insight, confidence: 6, source: 'review', files: [] });
-      console.log(`     ✓ saved [6/10]`);
+      const entry = addLearning({ type, key, insight: c.insight, confidence: 6, source: 'review', files: [] });
+      print(`     ✓ saved [6/10]`);
+      mintRichLearn({
+        cwd,
+        key: entry.key,
+        insight: entry.insight,
+        now: deps.now,
+        output: print,
+      });
     } catch (err) {
-      console.log(`     ✗ ${err.message}`);
+      print(`     ✗ ${err.message}`);
     }
   }
-  console.log('');
+  print('');
 }
 
 /**
@@ -471,10 +498,10 @@ function showLearnHelp() {
   console.log('');
   console.log('  Commands:');
   console.log('    (none)     Show recent learnings');
-  console.log('    add        Add a learning interactively');
+  console.log('    add        Add a learning interactively. A rich insight mints one apply plus a failing measure.py.');
   console.log('    log <json> Add programmatically (for agents). A rich insight (number or named mechanism) mints one apply plus a failing measure.py.');
   console.log('    search <q> Search learnings by keyword');
-  console.log('    harvest    Extract learnings from journal Notes');
+  console.log('    harvest    Extract learnings from journal Notes. A rich insight mints one apply plus a failing measure.py.');
   console.log('    prune      Check for stale/contradictory entries');
   console.log('    stats      Show learning statistics');
   console.log('    export     Export as markdown');
@@ -540,6 +567,8 @@ learnAtris.learnLessonFromText = learnLessonFromText;
 learnAtris.saveRichLearn = saveRichLearn;
 learnAtris.ensureLearnApply = ensureLearnApply;
 learnAtris.mintRichLearn = mintRichLearn;
+learnAtris.commitAddedLearning = commitAddedLearning;
+learnAtris.harvestFromJournals = harvestFromJournals;
 learnAtris.logDirect = logDirect;
 
 module.exports = learnAtris;

@@ -19,6 +19,8 @@ const {
   learnExperimentRel,
   saveRichLearn,
   mintRichLearn,
+  commitAddedLearning,
+  harvestFromJournals,
   logDirect,
 } = learnAtris;
 
@@ -252,4 +254,195 @@ test('learn log without a key still refuses invented success', () => {
   assert.notEqual(exitCode, 0);
   assert.match(err.text(), /Schema:/);
   assert.doesNotMatch(out.text(), /score: 0/);
+});
+
+function runCliLearnHarvest(cwd) {
+  return spawnSync(process.execPath, [CLI_PATH, 'learn', 'harvest'], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 20000,
+    env: {
+      ...process.env,
+      ATRIS_SKIP_UPDATE_CHECK: '1',
+    },
+  });
+}
+
+function writeHarvestNotes(cwd, notes, date = '2026-09-08') {
+  const dir = path.join(cwd, 'atris', 'logs', date.slice(0, 4));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${date}.md`), [
+    `# Log ${date}`,
+    '',
+    '## Notes',
+    ...notes.map((note) => `- ${note}`),
+    '',
+    '## Inbox',
+    '',
+  ].join('\n'));
+}
+
+function harvestKey(insight) {
+  return String(insight).toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).slice(0, 4).join('-');
+}
+
+test('rich learn add mints a failing apply and prints score 0', () => {
+  assert.ok(pythonCmd, 'python3 is required to score the minted pack');
+  const cwd = learnWorkspace();
+  const origCwd = process.cwd();
+  const out = collect();
+  let saved;
+  process.chdir(cwd);
+  try {
+    saved = commitAddedLearning({
+      type: 'pattern',
+      key: RICH_KEY,
+      insight: RICH_INSIGHT,
+      confidence: 8,
+      source: 'observed',
+      files: [],
+    }, {
+      cwd,
+      now: '2026-09-08',
+      output: out.output,
+    });
+  } finally {
+    process.chdir(origCwd);
+  }
+
+  assert.equal(saved.baseline, 0);
+  assert.equal(saved.entry.key, 'attention-window');
+  assert.equal(out.lines.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.match(out.text(), /next: atris experiments keep learn-attention-window/);
+  assert.doesNotMatch(out.text(), /check: fill this/);
+  assert.doesNotMatch(out.text(), /what is the omakase model/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'learn-attention-window', 'measure.py')), true);
+  assertLearnApplyClaimable(cwd, {
+    key: saved.entry.key,
+    tokens: ['omakase model', 'what is the omakase model?'],
+  });
+  const stub = spawnSync(pythonCmd, [path.join(cwd, 'atris', 'experiments', 'learn-attention-window', 'measure.py')], {
+    cwd: path.join(cwd, 'atris', 'experiments', 'learn-attention-window'),
+    encoding: 'utf8',
+    env: { ...process.env, ATRIS_REPO_ROOT: cwd },
+  });
+  assert.equal(stub.status, 0, stub.stderr || stub.stdout);
+  assert.equal(JSON.parse(stub.stdout.trim().split('\n').pop()).score, 0);
+});
+
+test('thin learn add stays prose only and does not invent a check', () => {
+  const cwd = learnWorkspace();
+  const origCwd = process.cwd();
+  const out = collect();
+  let saved;
+  process.chdir(cwd);
+  try {
+    saved = commitAddedLearning({
+      type: 'pattern',
+      key: 'map-first',
+      insight: THIN_INSIGHT,
+      confidence: 8,
+      source: 'observed',
+      files: [],
+    }, {
+      cwd,
+      now: '2026-09-08',
+      output: out.output,
+    });
+  } finally {
+    process.chdir(origCwd);
+  }
+
+  assert.equal(saved.baseline, 0);
+  assert.match(out.text(), /map-first/);
+  assert.doesNotMatch(out.text(), /score: 0/);
+  assert.doesNotMatch(out.text(), /check: fill this/);
+  assert.doesNotMatch(out.text(), /next: atris experiments keep/);
+  assert.doesNotMatch(out.text(), /next: /);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, learnApplyRel('map-first'))), false);
+});
+
+test('rich learn harvest mints a failing apply and prints score 0', () => {
+  assert.ok(pythonCmd, 'python3 is required to score the minted pack');
+  const cwd = learnWorkspace();
+  writeHarvestNotes(cwd, [RICH_INSIGHT]);
+  const origCwd = process.cwd();
+  const out = collect();
+  process.chdir(cwd);
+  try {
+    harvestFromJournals({
+      cwd,
+      now: '2026-09-08',
+      output: out.output,
+    });
+  } finally {
+    process.chdir(origCwd);
+  }
+
+  const key = harvestKey(RICH_INSIGHT);
+  assert.equal(out.lines.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.match(out.text(), new RegExp(`next: atris experiments keep learn-${key}`));
+  assert.doesNotMatch(out.text(), /check: fill this/);
+  assert.doesNotMatch(out.text(), /what is the omakase model/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', `learn-${key}`, 'measure.py')), true);
+  assertLearnApplyClaimable(cwd, {
+    key,
+    tokens: ['omakase model', 'what is the omakase model?'],
+  });
+  const stub = spawnSync(pythonCmd, [path.join(cwd, 'atris', 'experiments', `learn-${key}`, 'measure.py')], {
+    cwd: path.join(cwd, 'atris', 'experiments', `learn-${key}`),
+    encoding: 'utf8',
+    env: { ...process.env, ATRIS_REPO_ROOT: cwd },
+  });
+  assert.equal(stub.status, 0, stub.stderr || stub.stdout);
+  assert.equal(JSON.parse(stub.stdout.trim().split('\n').pop()).score, 0);
+});
+
+test('thin learn harvest stays prose only and does not invent a check', () => {
+  const cwd = learnWorkspace();
+  writeHarvestNotes(cwd, [THIN_INSIGHT]);
+  const origCwd = process.cwd();
+  const out = collect();
+  process.chdir(cwd);
+  try {
+    harvestFromJournals({
+      cwd,
+      now: '2026-09-08',
+      output: out.output,
+    });
+  } finally {
+    process.chdir(origCwd);
+  }
+
+  assert.match(out.text(), /saved/);
+  assert.doesNotMatch(out.text(), /score: 0/);
+  assert.doesNotMatch(out.text(), /check: fill this/);
+  assert.doesNotMatch(out.text(), /next: atris experiments keep/);
+  assert.doesNotMatch(out.text(), /next: /);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, learnApplyRel(harvestKey(THIN_INSIGHT)))), false);
+});
+
+test('rich learn harvest through the live cli mints the pack', () => {
+  assert.ok(pythonCmd, 'python3 is required to score the minted pack');
+  const cwd = learnWorkspace();
+  writeHarvestNotes(cwd, [RICH_INSIGHT, THIN_INSIGHT]);
+  const result = runCliLearnHarvest(cwd);
+  const key = harvestKey(RICH_INSIGHT);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /score: 0/);
+  assert.match(result.stdout, new RegExp(`next: atris experiments keep learn-${key}`));
+  assert.doesNotMatch(result.stdout + result.stderr, /check: fill this/);
+  const measurePy = path.join(cwd, 'atris', 'experiments', `learn-${key}`, 'measure.py');
+  assert.equal(fs.existsSync(measurePy), true);
+  assert.equal(fs.existsSync(path.join(cwd, learnApplyRel(key))), true);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', `learn-${harvestKey(THIN_INSIGHT)}`)), false);
+  const stub = spawnSync(pythonCmd, [measurePy], {
+    cwd: path.dirname(measurePy),
+    encoding: 'utf8',
+    env: { ...process.env, ATRIS_REPO_ROOT: cwd },
+  });
+  assert.equal(stub.status, 0, stub.stderr || stub.stdout);
+  assert.equal(JSON.parse(stub.stdout.trim().split('\n').pop()).score, 0);
 });
