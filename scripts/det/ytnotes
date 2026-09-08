@@ -20,12 +20,13 @@ WORK="${TMPDIR:-/tmp}/ytnotes"
 mkdir -p "$WORK"
 cd "$WORK"
 
+# Printed metadata and a written VTT are a hit even when yt-dlp exits 429.
 META=$(yt-dlp --no-update --quiet --no-warnings --skip-download \
   --write-auto-subs --sub-format vtt --sub-langs en \
   --no-simulate \
   -o "yt_%(id)s" \
   --print "%(id)s|%(title)s|%(channel)s|%(duration_string)s" \
-  "$URL" 2>/dev/null)
+  "$URL" 2>/dev/null) || true
 ID="${META%%|*}"
 INFO="${META#*|}"
 
