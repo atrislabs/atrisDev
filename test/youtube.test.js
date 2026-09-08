@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const {
   DEFAULT_QUERY,
   parseYoutubeArgs,
@@ -21,9 +22,25 @@ const {
   LEARNER_SCORE_ZERO,
   learnerCheckFromLesson,
   scoreLearnerNeedles,
+  processExperimentSlug,
+  processApplyRel,
   youtubeCommand,
 } = require('../commands/youtube');
 const { ephemeralApplyMessage } = require('../lib/apply-gate');
+
+const REPO_ROOT = path.resolve(__dirname, '..');
+const VALIDATE_PY = path.join(REPO_ROOT, 'atris', 'experiments', 'validate.py');
+const CLI_PATH = path.join(REPO_ROOT, 'bin', 'atris.js');
+
+function findPython() {
+  for (const candidate of ['python3', 'python']) {
+    const result = spawnSync(candidate, ['--version'], { encoding: 'utf8' });
+    if (!result.error && result.status === 0) return candidate;
+  }
+  return null;
+}
+
+const pythonCmd = findPython();
 
 const RICH_NOTES = [
   '# Apply Gate Video',
@@ -44,6 +61,55 @@ function filledApplyWorkspace(id, url) {
     '',
   ].join('\n'));
   return cwd;
+}
+
+function escapeRe(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stubRichProcess(data = {}) {
+  return {
+    ok: true,
+    status: 200,
+    data: {
+      status: 'success',
+      message: 'YouTube video processed successfully',
+      video_analysis: RICH_NOTES,
+      credits_used: 5,
+      credits_remaining: 42,
+      ...data,
+    },
+  };
+}
+
+function runExperimentsKeep(cwd, slug) {
+  return spawnSync(process.execPath, [CLI_PATH, 'experiments', 'keep', slug], {
+    cwd,
+    encoding: 'utf8',
+    timeout: 20000,
+    env: {
+      ...process.env,
+      ATRIS_SKIP_UPDATE_CHECK: '1',
+      ...(pythonCmd ? { ATRIS_EXPERIMENTS_PYTHON: pythonCmd } : {}),
+    },
+  });
+}
+
+function assertProcessApplyClaimable(cwd, { id, tokens = [], date = '2026-08-26' } = {}) {
+  const packRel = `atris/experiments/${processExperimentSlug(id)}`;
+  const applyRel = processApplyRel(id);
+  const sidecar = fs.readFileSync(path.join(cwd, applyRel), 'utf8');
+  assert.match(sidecar, new RegExp(escapeRe(packRel)));
+  assert.match(sidecar, /keep only if measure\.py moves 0→1/);
+  assert.match(sidecar, /scores 1 only when the fixture contains the check tokens/);
+  for (const token of tokens) {
+    assert.doesNotMatch(sidecar, new RegExp(escapeRe(token), 'i'));
+  }
+  const journal = fs.readFileSync(path.join(cwd, 'atris', 'logs', date.slice(0, 4), `${date}.md`), 'utf8');
+  assert.match(journal, /\[claimable\] apply: /);
+  assert.match(journal, new RegExp(escapeRe(packRel)));
+  assert.match(journal, /keep only if measure\.py moves 0→1/);
+  return { packRel, applyRel, sidecar, journal };
 }
 
 test('parseYoutubeArgs accepts process form with query, storage, json, and timeout', () => {
@@ -148,6 +214,8 @@ test('youtubeCommand calls the process_youtube endpoint without curl', async () 
   assert.equal(output.filter((line) => line === `check: ${LEARNER_CHECK_FILL}`).length, 1);
   assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 0);
   assert.equal(output.filter((line) => String(line).startsWith('next:')).length, 0);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, processApplyRel('abc123'))), false);
 });
 
 test('youtubeCommand sends local transcript first without caching it', async () => {
@@ -999,7 +1067,7 @@ test('youtube help says notes stay ephemeral unless --save', async () => {
   assert.match(text, /unsave <url-or-id>/);
   assert.match(text, /matching notes\/teach experiment packs/);
   assert.match(text, /needs a filled Apply/);
-  assert.match(text, /rich process prints one failing check/);
+  assert.match(text, /rich process writes one apply and a failing keep\/revert pack/);
 });
 
 test('youtube process without apply exits 2 and never calls the api', async () => {
@@ -1194,38 +1262,45 @@ test('youtube process with no stored JWT fails in one sentence and stays off the
   assert.doesNotMatch(output.join('\n'), /\/auth\/cli|Choose login method|Opening browser|https:\/\//);
 });
 
-test('youtube process prints a failing check from rich analysis and no next-step', async () => {
+test('processExperimentSlug prefixes the video id', () => {
+  assert.equal(processExperimentSlug('procrich'), 'process-procrich');
+  assert.equal(processExperimentSlug('ABC_123'), 'process-abc-123');
+});
+
+test('youtube process prints keep next and score 0 after a rich analysis', async () => {
   const url = 'https://youtu.be/procrich';
   const cwd = filledApplyWorkspace('procrich', url);
   const output = [];
 
   const status = await youtubeCommand(['process', url], {
     cwd,
+    now: '2026-08-26',
     output: (line) => output.push(line),
     ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
     extractLocalTranscript: async () => null,
-    apiRequestJson: async () => ({
-      ok: true,
-      status: 200,
-      data: {
-        status: 'success',
-        message: 'YouTube video processed successfully',
-        video_analysis: RICH_NOTES,
-        credits_used: 5,
-        credits_remaining: 42,
-      },
-    }),
+    apiRequestJson: async () => stubRichProcess(),
   });
 
   assert.equal(status, 0);
-  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.match(output.join('\n'), /YouTube video processed successfully/);
+  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 0);
   assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.deepEqual(
+    output.filter((line) => String(line).startsWith('next:')),
+    ['next: atris experiments keep process-procrich'],
+  );
   assert.ok(
-    output.indexOf('check: what is the omakase model?')
+    output.indexOf('next: atris experiments keep process-procrich')
       < output.indexOf(LEARNER_SCORE_ZERO),
   );
-  assert.equal(output.filter((line) => String(line).startsWith('next:')).length, 0);
   assert.equal(output.includes(PROCESS_APPLY_MESSAGE), false);
+  assert.equal(output.includes(ephemeralApplyMessage('process')), false);
+  const claim = assertProcessApplyClaimable(cwd, {
+    id: 'procrich',
+    tokens: ['omakase model', 'what is the omakase model?'],
+  });
+  assert.equal(fs.existsSync(path.join(cwd, claim.packRel, 'measure.py')), true);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-procrich.apply.md')), true);
 });
 
 test('youtube process --json stays quiet on the learner check', async () => {
@@ -1255,6 +1330,8 @@ test('youtube process --json stays quiet on the learner check', async () => {
   assert.doesNotMatch(output.join('\n'), /^check:/m);
   assert.doesNotMatch(output.join('\n'), /score: 0/);
   assert.equal(output.filter((line) => String(line).startsWith('next:')).length, 0);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, processApplyRel('procjson'))), false);
 });
 
 test('youtube process without apply prints no learner check', async () => {
@@ -1275,6 +1352,109 @@ test('youtube process without apply prints no learner check', async () => {
   assert.equal(output.includes(PROCESS_APPLY_MESSAGE), true);
   assert.doesNotMatch(output.join('\n'), /^check:/m);
   assert.doesNotMatch(output.join('\n'), /score: 0/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, processApplyRel('procnone'))), false);
+});
+
+test('rich youtube process mints a measure.py that validate.py accepts and scores 0 or 1 honestly', async () => {
+  assert.ok(pythonCmd, 'python3 is required to score the minted pack');
+  const url = 'https://youtu.be/procpack';
+  const cwd = filledApplyWorkspace('procpack', url);
+  const output = [];
+  const status = await youtubeCommand(['process', url], {
+    cwd,
+    now: '2026-08-26',
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    extractLocalTranscript: async () => null,
+    apiRequestJson: async () => stubRichProcess(),
+  });
+
+  assert.equal(status, 0);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.match(output.join('\n'), /next: atris experiments keep process-procpack/);
+  const packDir = path.join(cwd, 'atris', 'experiments', 'process-procpack');
+  for (const name of ['program.md', 'measure.py', 'loop.py', 'reset.py', 'results.tsv']) {
+    assert.equal(fs.existsSync(path.join(packDir, name)), true, name);
+  }
+  const program = fs.readFileSync(path.join(packDir, 'program.md'), 'utf8');
+  assert.ok(program.length < 1200);
+  assert.match(program, /omakase model/);
+  const measureSrc = fs.readFileSync(path.join(packDir, 'measure.py'), 'utf8');
+  assert.match(measureSrc, /omakase model/);
+
+  const validated = spawnSync(pythonCmd, [VALIDATE_PY, packDir], { encoding: 'utf8' });
+  assert.equal(validated.status, 0, validated.stderr || validated.stdout);
+  assert.match(validated.stdout, /PASS/);
+
+  function scoreFixture(text) {
+    const fixture = path.join(cwd, 'fixture.md');
+    fs.writeFileSync(fixture, text);
+    const measured = spawnSync(pythonCmd, [path.join(packDir, 'measure.py')], {
+      cwd: packDir,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ATRIS_REPO_ROOT: cwd,
+        ATRIS_TEACH_MEASURE_FIXTURE: fixture,
+      },
+    });
+    assert.equal(measured.status, 0, measured.stderr || measured.stdout);
+    return JSON.parse(measured.stdout.trim().split('\n').pop());
+  }
+
+  const miss = scoreFixture('feelings and vibes and a chat about nothing');
+  assert.equal(miss.score, 0);
+  const hit = scoreFixture('keep the omakase model as the default stack');
+  assert.equal(hit.score, 1);
+
+  const claim = assertProcessApplyClaimable(cwd, {
+    id: 'procpack',
+    tokens: ['omakase model', 'what is the omakase model?'],
+  });
+  const stub = spawnSync(pythonCmd, [path.join(packDir, 'measure.py')], {
+    cwd: packDir,
+    encoding: 'utf8',
+    env: { ...process.env, ATRIS_REPO_ROOT: cwd },
+  });
+  assert.equal(stub.status, 0, stub.stderr || stub.stdout);
+  const stubPayload = JSON.parse(stub.stdout.trim().split('\n').pop());
+  assert.equal(stubPayload.score, 0);
+  assert.doesNotMatch(claim.sidecar, /omakase model/i);
+
+  const keep = runExperimentsKeep(cwd, 'process-procpack');
+  assert.equal(keep.status, 1, keep.stderr || keep.stdout);
+  assert.match(keep.stderr + keep.stdout, /revert|score 0|keep only if/i);
+});
+
+test('youtube unsave after rich process removes the minted pack', async () => {
+  const url = 'https://youtu.be/procgone';
+  const cwd = filledApplyWorkspace('procgone', url);
+  const save = await youtubeCommand(['process', url], {
+    cwd,
+    now: '2026-08-26',
+    output: () => {},
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    extractLocalTranscript: async () => null,
+    apiRequestJson: async () => stubRichProcess(),
+  });
+  assert.equal(save, 0);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'process-procgone', 'measure.py')), true);
+  assert.equal(fs.existsSync(path.join(cwd, processApplyRel('procgone'))), true);
+
+  const output = [];
+  const status = await youtubeCommand(['unsave', 'procgone'], {
+    cwd,
+    output: (line) => output.push(line),
+    runner: () => {
+      throw new Error('unsave must not run notes');
+    },
+  });
+  assert.equal(status, 0);
+  assert.match(output.join('\n'), /atris\/experiments\/process-procgone/);
+  assert.match(output.join('\n'), /atris\/wiki\/briefs\/process-procgone\.apply\.md/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'process-procgone')), false);
+  assert.equal(fs.existsSync(path.join(cwd, processApplyRel('procgone'))), false);
 });
 
 test('formatYoutubeResult includes metadata, credits, and analysis', () => {

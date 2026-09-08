@@ -47,7 +47,7 @@ function showYoutubeHelp(output = console.log, commandName = 'atris youtube') {
   output('notes = free local notes to stdout; ephemeral unless --save; hands off to teach');
   output('teach = one chapter from local captions; bare teach resumes unpaid checks, then the next chapter after recap or skip');
   output('rich ephemeral notes/teach print one apply next-step and one failing check (no files)');
-  output('process = 5 credits cloud knowledge (needs a filled Apply); rich process prints one failing check');
+  output('process = 5 credits cloud knowledge (needs a filled Apply); rich process writes one apply and a failing keep/revert pack');
   output('digest = one decision page from this week\'s video briefs; rich digest writes one apply and a failing keep/revert pack');
   output('watch = subscribed channels turn into briefs without a human; add hands off to tick; tick hands off to teach when it briefed');
   output('Process a YouTube video through Atris using timestamped transcript-first analysis.');
@@ -830,6 +830,8 @@ function unsaveYoutubeNotes(target, deps = {}) {
   }
   for (const rel of listTeachSidecarRels(cwd, id)) add(rel);
   add(notesExperimentRel(id));
+  add(processApplyRel(id));
+  add(processExperimentRel(id));
   for (const section of sections) add(teachExperimentRel(id, section));
 
   const removed = [];
@@ -875,6 +877,85 @@ function ensureProcessApply({ cwd, url, now, output } = {}) {
     incompleteMessage: PROCESS_APPLY_MESSAGE,
     required: true,
   });
+}
+
+function processExperimentSlug(id) {
+  return `process-${experimentIdToken(id)}`;
+}
+
+function processExperimentRel(id) {
+  return `atris/experiments/${processExperimentSlug(id)}`;
+}
+
+function processApplyRel(id) {
+  return applyGate.applySidecarRel('process', experimentIdToken(id));
+}
+
+function saveRichProcess({ cwd, url, lesson } = {}) {
+  if (isThinTeachLesson(lesson)) {
+    return { thin: true, packRel: null, lesson };
+  }
+  if (cwd) fs.mkdirSync(path.join(cwd, 'atris', 'wiki'), { recursive: true });
+  const id = videoIdFromUrl(url);
+  const packRel = fileTeachExperiment({
+    cwd,
+    url,
+    lesson,
+    slug: id ? processExperimentSlug(id) : null,
+    applyRel: id ? processApplyRel(id) : null,
+  });
+  return { thin: false, packRel, lesson, source: url };
+}
+
+function ensureProcessLearnerApply({ cwd, url, packRel, now, output, source } = {}) {
+  const id = videoIdFromUrl(url);
+  const pack = packRel || (id ? processExperimentRel(id) : null);
+  const slug = pack ? path.basename(pack) : null;
+  if (cwd) fs.mkdirSync(path.join(cwd, 'atris', 'wiki'), { recursive: true });
+  return applyGate.ensureApply({
+    cwd,
+    source: source || url || (id ? `process:${id}` : 'process'),
+    rel: id ? processApplyRel(id) : null,
+    now,
+    output,
+    incompleteMessage: slug
+      ? `next: atris experiments keep ${slug}`
+      : applyGate.ephemeralApplyMessage('process'),
+    required: false,
+    change: pack ? `apply ${pack}` : undefined,
+    receipt: pack ? TEACH_KEEP_RULE : undefined,
+    journalLine: pack ? `- [claimable] apply: ${pack}. ${TEACH_KEEP_RULE}` : undefined,
+  });
+}
+
+function mintRichProcess({ cwd, url, data, now, output, ensureApply, json } = {}) {
+  const print = typeof output === 'function' ? output : (line = '') => console.log(line);
+  const lesson = notesLessonFromText(processAnalysisText(data));
+  if (isThinTeachLesson(lesson)) {
+    printProcessLearnerGate(data, { json }, print);
+    return 0;
+  }
+  const saved = saveRichProcess({ cwd, url, lesson });
+  const applyFn = ensureApply || ensureProcessLearnerApply;
+  const applyCode = applyFn({
+    cwd,
+    url,
+    packRel: saved.packRel,
+    now,
+    output: print,
+    source: url,
+  });
+  if (ensureApply) return applyCode;
+  const id = videoIdFromUrl(url);
+  const baseline = proveSavedLearnerBaseline({
+    cwd,
+    applyRel: id ? processApplyRel(id) : null,
+    lesson: saved.lesson,
+    output: print,
+    json,
+  });
+  if (baseline !== 0) return baseline;
+  return applyCode;
 }
 
 const DIGEST_ENGINE_TIMEOUT_MS = 240000;
@@ -3551,7 +3632,15 @@ async function youtubeCommand(argv = process.argv.slice(3), deps = {}) {
       output(JSON.stringify(data, null, 2));
     } else {
       output(formatYoutubeResult(data));
-      printProcessLearnerGate(data, {}, output);
+      const mintCode = mintRichProcess({
+        cwd: deps.cwd || process.cwd(),
+        url: options.youtubeUrl,
+        data,
+        now: deps.now,
+        output,
+        ensureApply: deps.ensureApply,
+      });
+      if (mintCode !== 0) status = mintCode;
     }
   } catch (err) {
     if (!err.applyRequired) output(err.message);
@@ -3617,7 +3706,11 @@ module.exports = {
   notesExperimentSlug,
   digestExperimentSlug,
   watchExperimentSlug,
+  processExperimentSlug,
+  processApplyRel,
   firstRichWatchLesson,
   fileTeachExperiment,
+  saveRichProcess,
+  mintRichProcess,
   youtubeCommand,
 };
