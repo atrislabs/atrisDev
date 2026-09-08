@@ -3855,8 +3855,6 @@ module.exports = {
   processApplyRel,
   searchExperimentSlug,
   searchApplyRel,
-  saveRichSearch,
-  mintRichSearch,
   firstRichWatchLesson,
   fileTeachExperiment,
   youtubeCommand,
