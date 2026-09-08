@@ -1,7 +1,7 @@
 ---
 name: youtube
 description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 use printed rows if any; else the CLI retries once, then cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.18.4
+version: 2.18.5
 tags:
   - youtube
   - research
@@ -44,6 +44,10 @@ search QUERY (free)
     |                 owed prints unpaid check; successful unlock prints next section command
     |                 bare teach resumes owed, or prints a start command if nothing is owed
     |
+   persist a rich lesson? --> learn log '{"type":"pattern","key":"...","insight":"..."}'
+                           --> rich: one pack-named apply + failing measure.py (score 0), then next: experiments keep
+                           --> thin: jsonl only
+
    write one Apply (claimable) before process
     |
    store knowledge? --> process URL (5 credits)
