@@ -545,11 +545,107 @@ test('youtube search persistent 429 serves fresh same-query cache and stays off 
   const text = output.join('\n');
   assert.match(text, /MCP Agents in 2026 \| Dev Channel \| 18:22 \| 42000 \| 20260820 \| https:\/\/youtu\.be\/mcp2026a/);
   assert.match(text, new RegExp(CACHE_NOTE));
+  assert.equal(output.filter((line) => line === `check: ${LEARNER_CHECK_FILL}`).length, 1);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 0);
   assert.equal(output.filter((line) => String(line).startsWith('next:')).length, 1);
   assert.equal(output.includes(TEACH_NEXT_LINE), true);
+  assert.ok(
+    output.indexOf(`check: ${LEARNER_CHECK_FILL}`)
+      < output.indexOf(TEACH_NEXT_LINE),
+  );
+  assert.ok(output.indexOf(TEACH_NEXT_LINE) < output.indexOf(CACHE_NOTE));
+  assert.doesNotMatch(text, /\/youtube\/search|--paid|token/);
+});
+
+test('youtube search persistent 429 cache reprint prints a failing check from a rich title', async () => {
+  const output = [];
+  const now = 1_700_000_000_000;
+  const richRow = {
+    title: '37signals uses the omakase model',
+    channel: 'Basecamp',
+    duration: '12:00',
+    views: '100',
+    upload_date: '20260801',
+    url: 'https://youtu.be/omakase1',
+  };
+  const fsMock = mockSearchFs({
+    [CACHE_PATH]: `${JSON.stringify({
+      query: 'omakase',
+      savedAt: now - 10 * 60 * 1000,
+      rows: [richRow],
+    })}\n`,
+  });
+
+  const status = await youtubeCommand(['search', 'omakase'], {
+    ...cacheDeps({ fs: fsMock, now: () => now }),
+    output: (line) => output.push(line),
+    sleep: async () => {},
+    apiRequestJson: async (pathname) => {
+      return { ok: false, status: 500, error: `unexpected ${pathname}` };
+    },
+    runner: () => ({
+      status: 1,
+      stdout: '',
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+  });
+
+  assert.equal(status, 0);
+  const text = output.join('\n');
+  assert.match(text, /37signals uses the omakase model/);
+  assert.match(text, new RegExp(CACHE_NOTE));
+  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.equal(output.includes('next: atris youtube teach "https://youtu.be/omakase1"'), true);
+  assert.ok(
+    output.indexOf('check: what is the omakase model?')
+      < output.indexOf(LEARNER_SCORE_ZERO),
+  );
+  assert.ok(
+    output.indexOf(LEARNER_SCORE_ZERO)
+      < output.indexOf('next: atris youtube teach "https://youtu.be/omakase1"'),
+  );
+  assert.doesNotMatch(text, /\/youtube\/search|--paid|token|429|Too Many Requests/);
+});
+
+test('youtube search persistent 429 cache reprint --json stays quiet on the learner check', async () => {
+  const output = [];
+  const now = 1_700_000_000_000;
+  const fsMock = mockSearchFs({
+    [CACHE_PATH]: `${JSON.stringify({
+      query: 'omakase',
+      savedAt: now - 10 * 60 * 1000,
+      rows: [{
+        title: '37signals uses the omakase model',
+        channel: 'Basecamp',
+        duration: '12:00',
+        views: '100',
+        upload_date: '20260801',
+        url: 'https://youtu.be/omakase1',
+      }],
+    })}\n`,
+  });
+
+  const status = await youtubeCommand(['search', 'omakase', '--json'], {
+    ...cacheDeps({ fs: fsMock, now: () => now }),
+    output: (line) => output.push(line),
+    sleep: async () => {},
+    runner: () => ({
+      status: 1,
+      stdout: '',
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+  });
+
+  assert.equal(status, 0);
+  const text = output.join('\n');
+  const parsed = JSON.parse(output[0]);
+  assert.equal(parsed[0].title, '37signals uses the omakase model');
+  assert.match(text, new RegExp(CACHE_NOTE));
   assert.doesNotMatch(text, /^check:/m);
   assert.doesNotMatch(text, /score: 0/);
-  assert.doesNotMatch(text, /\/youtube\/search|--paid|token/);
+  assert.doesNotMatch(text, /next: atris youtube teach/);
+  assert.doesNotMatch(text, /\/youtube\/search|--paid/);
 });
 
 test('youtube search persistent 429 with expired cache keeps the rate-limit sentence', async () => {
