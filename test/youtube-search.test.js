@@ -2,7 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
 const path = require('path');
+const { spawnSync } = require('node:child_process');
 const {
   parseSearchArgs,
   parseSearchStdout,
@@ -11,6 +14,8 @@ const {
   APPLY_NEXT_MESSAGE,
   LEARNER_CHECK_FILL,
   LEARNER_SCORE_ZERO,
+  searchExperimentSlug,
+  searchApplyRel,
 } = require('../commands/youtube');
 
 const CACHE_HOME = '/tmp/atris-yt-search-cache-home';
@@ -61,6 +66,51 @@ function cacheDeps(extra = {}) {
     homeDir: CACHE_HOME,
     ...extra,
   };
+}
+
+const REPO_ROOT = path.resolve(__dirname, '..');
+const VALIDATE_PY = path.join(REPO_ROOT, 'atris', 'experiments', 'validate.py');
+const RICH_SEARCH_LINE =
+  '37signals uses the omakase model | Basecamp | 12:00 | 100 | 20260801 | https://youtu.be/omakase1';
+const RICH_SEARCH_KEEP = 'next: atris experiments keep search-omakase';
+const RICH_TEACH_NEXT = 'next: atris youtube teach "https://youtu.be/omakase1"';
+
+function findPython() {
+  for (const candidate of ['python3', 'python']) {
+    const result = spawnSync(candidate, ['--version'], { encoding: 'utf8' });
+    if (!result.error && result.status === 0) return candidate;
+  }
+  return null;
+}
+
+const pythonCmd = findPython();
+
+function searchWorkspace() {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-search-'));
+  fs.mkdirSync(path.join(cwd, 'atris', 'wiki'), { recursive: true });
+  return cwd;
+}
+
+function escapeRe(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function assertSearchApplyClaimable(cwd, { query, tokens = [], date } = {}) {
+  const slug = searchExperimentSlug(query);
+  const packRel = `atris/experiments/${slug}`;
+  const applyRel = searchApplyRel(query);
+  const sidecar = fs.readFileSync(path.join(cwd, applyRel), 'utf8');
+  assert.match(sidecar, new RegExp(escapeRe(packRel)));
+  assert.match(sidecar, /keep only if measure\.py moves 0→1/);
+  assert.match(sidecar, /scores 1 only when the fixture contains the check tokens/);
+  for (const token of tokens) {
+    assert.doesNotMatch(sidecar, new RegExp(escapeRe(token), 'i'));
+  }
+  const stamp = date || new Date().toISOString().slice(0, 10);
+  const journal = fs.readFileSync(path.join(cwd, 'atris', 'logs', stamp.slice(0, 4), `${stamp}.md`), 'utf8');
+  assert.match(journal, /\[claimable\] apply: /);
+  assert.match(journal, new RegExp(escapeRe(packRel)));
+  return { packRel, applyRel, sidecar, journal };
 }
 
 test('parseSearchArgs accepts query with limit and json', () => {
@@ -150,7 +200,7 @@ test('youtube --help lists paid search', async () => {
   const text = output.join('\n');
   assert.match(text, /search --paid/);
   assert.match(text, /5 credits, watch permalinks/);
-  assert.match(text, /rich free search prints one failing check/);
+  assert.match(text, /rich free search writes one apply and a failing keep\/revert pack/);
   assert.match(text, /rich paid search prints one failing check/);
   assert.match(text, /hands off to teach/);
 });
@@ -193,32 +243,135 @@ test('youtube search prints youtu.be links from mocked runner', async () => {
   assert.equal(output.includes(WATCH_TICK_NEXT), false);
 });
 
-test('youtube search prints a failing check from a rich title', async () => {
+test('searchExperimentSlug prefixes the query slug', () => {
+  assert.equal(searchExperimentSlug('omakase'), 'search-omakase');
+  assert.equal(searchExperimentSlug('MCP agents 2026'), 'search-mcp-agents-2026');
+});
+
+test('youtube search prints keep next and score 0 after a rich title', async () => {
+  const cwd = searchWorkspace();
   const output = [];
   const status = await youtubeCommand(['search', 'omakase'], {
     ...cacheDeps(),
+    cwd,
+    now: '2026-09-08',
     output: (line) => output.push(line),
     runner: () => ({
       status: 0,
-      stdout: '37signals uses the omakase model | Basecamp | 12:00 | 100 | 20260801 | https://youtu.be/omakase1\n',
+      stdout: `${RICH_SEARCH_LINE}\n`,
     }),
   });
 
   assert.equal(status, 0);
-  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.match(output.join('\n'), /37signals uses the omakase model/);
+  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 0);
   assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
-  assert.ok(
-    output.indexOf('check: what is the omakase model?')
-      < output.indexOf(LEARNER_SCORE_ZERO),
+  assert.deepEqual(
+    output.filter((line) => String(line).startsWith('next:')),
+    [RICH_SEARCH_KEEP],
   );
-  assert.equal(output.filter((line) => line === `check: ${LEARNER_CHECK_FILL}`).length, 0);
+  assert.ok(output.indexOf(RICH_SEARCH_KEEP) < output.indexOf(LEARNER_SCORE_ZERO));
+  assert.equal(output.includes(RICH_TEACH_NEXT), false);
   assert.equal(output.includes(APPLY_NEXT_MESSAGE), false);
-  assert.equal(output.filter((line) => String(line).startsWith('next:')).length, 1);
-  assert.equal(output.includes('next: atris youtube teach "https://youtu.be/omakase1"'), true);
-  assert.ok(
-    output.indexOf(LEARNER_SCORE_ZERO)
-      < output.indexOf('next: atris youtube teach "https://youtu.be/omakase1"'),
-  );
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'search-omakase', 'measure.py')), true);
+  assertSearchApplyClaimable(cwd, {
+    query: 'omakase',
+    tokens: ['omakase model', 'what is the omakase model?'],
+    date: '2026-09-08',
+  });
+});
+
+test('youtube search --json stays quiet and writes no pack after a rich title', async () => {
+  const cwd = searchWorkspace();
+  const output = [];
+  const status = await youtubeCommand(['search', 'omakase', '--json'], {
+    ...cacheDeps(),
+    cwd,
+    output: (line) => output.push(line),
+    runner: () => ({
+      status: 0,
+      stdout: `${RICH_SEARCH_LINE}\n`,
+    }),
+  });
+
+  assert.equal(status, 0);
+  const parsed = JSON.parse(output.join('\n'));
+  assert.equal(parsed[0].url, 'https://youtu.be/omakase1');
+  assert.doesNotMatch(output.join('\n'), /^check:/m);
+  assert.doesNotMatch(output.join('\n'), /score: 0/);
+  assert.doesNotMatch(output.join('\n'), /next: atris experiments keep/);
+  assert.doesNotMatch(output.join('\n'), /next: atris youtube teach/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, searchApplyRel('omakase'))), false);
+});
+
+test('rich youtube search mints a measure.py that validate.py accepts and scores 0 or 1 honestly', async () => {
+  assert.ok(pythonCmd, 'python3 is required to score the minted pack');
+  const cwd = searchWorkspace();
+  const output = [];
+  const status = await youtubeCommand(['search', 'omakase'], {
+    ...cacheDeps(),
+    cwd,
+    now: '2026-09-08',
+    output: (line) => output.push(line),
+    runner: () => ({
+      status: 0,
+      stdout: `${RICH_SEARCH_LINE}\n`,
+    }),
+  });
+
+  assert.equal(status, 0);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.match(output.join('\n'), /next: atris experiments keep search-omakase/);
+  const packDir = path.join(cwd, 'atris', 'experiments', 'search-omakase');
+  for (const name of ['program.md', 'measure.py', 'loop.py', 'reset.py', 'results.tsv']) {
+    assert.equal(fs.existsSync(path.join(packDir, name)), true, name);
+  }
+  const program = fs.readFileSync(path.join(packDir, 'program.md'), 'utf8');
+  assert.ok(program.length < 1200);
+  assert.match(program, /omakase model/);
+  const measureSrc = fs.readFileSync(path.join(packDir, 'measure.py'), 'utf8');
+  assert.match(measureSrc, /omakase model/);
+
+  const validated = spawnSync(pythonCmd, [VALIDATE_PY, packDir], { encoding: 'utf8' });
+  assert.equal(validated.status, 0, validated.stderr || validated.stdout);
+  assert.match(validated.stdout, /PASS/);
+
+  function scoreFixture(text) {
+    const fixture = path.join(cwd, 'fixture.md');
+    fs.writeFileSync(fixture, text);
+    const measured = spawnSync(pythonCmd, [path.join(packDir, 'measure.py')], {
+      cwd: packDir,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        ATRIS_REPO_ROOT: cwd,
+        ATRIS_TEACH_MEASURE_FIXTURE: fixture,
+      },
+    });
+    assert.equal(measured.status, 0, measured.stderr || measured.stdout);
+    return JSON.parse(measured.stdout.trim().split('\n').pop());
+  }
+
+  const miss = scoreFixture('feelings and vibes and a chat about nothing');
+  assert.equal(miss.score, 0);
+  const hit = scoreFixture('keep the omakase model as the default stack');
+  assert.equal(hit.score, 1);
+
+  const claim = assertSearchApplyClaimable(cwd, {
+    query: 'omakase',
+    tokens: ['omakase model', 'what is the omakase model?'],
+    date: '2026-09-08',
+  });
+  const stub = spawnSync(pythonCmd, [path.join(packDir, 'measure.py')], {
+    cwd: packDir,
+    encoding: 'utf8',
+    env: { ...process.env, ATRIS_REPO_ROOT: cwd },
+  });
+  assert.equal(stub.status, 0, stub.stderr || stub.stdout);
+  const stubPayload = JSON.parse(stub.stdout.trim().split('\n').pop());
+  assert.equal(stubPayload.score, 0);
+  assert.doesNotMatch(claim.sidecar, /omakase model/i);
 });
 
 test('youtube search --json prints parsed rows', async () => {
@@ -349,11 +502,14 @@ test('youtube search keeps printed rows when yt-dlp exits 429', async () => {
 });
 
 test('youtube search retry keeps printed rows after a first empty 429', async () => {
+  const cwd = searchWorkspace();
   const output = [];
   const sleeps = [];
   const calls = [];
   const status = await youtubeCommand(['search', 'omakase'], {
     ...cacheDeps(),
+    cwd,
+    now: '2026-09-08',
     output: (line) => output.push(line),
     sleep: async (ms) => { sleeps.push(ms); },
     runner: (query, limit) => {
@@ -367,7 +523,7 @@ test('youtube search retry keeps printed rows after a first empty 429', async ()
       }
       return {
         status: 1,
-        stdout: '37signals uses the omakase model | Basecamp | 12:00 | 100 | 20260801 | https://youtu.be/omakase1\n',
+        stdout: `${RICH_SEARCH_LINE}\n`,
         stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
       };
     },
@@ -379,10 +535,14 @@ test('youtube search retry keeps printed rows after a first empty 429', async ()
     { query: 'omakase', limit: 5 },
   ]);
   assert.deepEqual(sleeps, [1000]);
-  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
   assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
-  assert.equal(output.includes('next: atris youtube teach "https://youtu.be/omakase1"'), true);
+  assert.deepEqual(
+    output.filter((line) => String(line).startsWith('next:')),
+    [RICH_SEARCH_KEEP],
+  );
+  assert.equal(output.includes(RICH_TEACH_NEXT), false);
   assert.doesNotMatch(output.join('\n'), /429|Too Many Requests|rate-limited|--paid/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'search-omakase', 'measure.py')), true);
 });
 
 test('youtube search retries once after a 429 then prints videos', async () => {
@@ -557,7 +717,8 @@ test('youtube search persistent 429 serves fresh same-query cache and stays off 
   assert.doesNotMatch(text, /\/youtube\/search|--paid|token/);
 });
 
-test('youtube search persistent 429 cache reprint prints a failing check from a rich title', async () => {
+test('youtube search persistent 429 cache reprint mints a failing apply from a rich title', async () => {
+  const cwd = searchWorkspace();
   const output = [];
   const now = 1_700_000_000_000;
   const richRow = {
@@ -578,6 +739,7 @@ test('youtube search persistent 429 cache reprint prints a failing check from a 
 
   const status = await youtubeCommand(['search', 'omakase'], {
     ...cacheDeps({ fs: fsMock, now: () => now }),
+    cwd,
     output: (line) => output.push(line),
     sleep: async () => {},
     apiRequestJson: async (pathname) => {
@@ -594,18 +756,17 @@ test('youtube search persistent 429 cache reprint prints a failing check from a 
   const text = output.join('\n');
   assert.match(text, /37signals uses the omakase model/);
   assert.match(text, new RegExp(CACHE_NOTE));
-  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 0);
   assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
-  assert.equal(output.includes('next: atris youtube teach "https://youtu.be/omakase1"'), true);
-  assert.ok(
-    output.indexOf('check: what is the omakase model?')
-      < output.indexOf(LEARNER_SCORE_ZERO),
+  assert.deepEqual(
+    output.filter((line) => String(line).startsWith('next:')),
+    [RICH_SEARCH_KEEP],
   );
-  assert.ok(
-    output.indexOf(LEARNER_SCORE_ZERO)
-      < output.indexOf('next: atris youtube teach "https://youtu.be/omakase1"'),
-  );
+  assert.ok(output.indexOf(RICH_SEARCH_KEEP) < output.indexOf(LEARNER_SCORE_ZERO));
+  assert.ok(output.indexOf(LEARNER_SCORE_ZERO) < output.indexOf(CACHE_NOTE));
+  assert.equal(output.includes(RICH_TEACH_NEXT), false);
   assert.doesNotMatch(text, /\/youtube\/search|--paid|token|429|Too Many Requests/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'search-omakase', 'measure.py')), true);
 });
 
 test('youtube search persistent 429 cache reprint --json stays quiet on the learner check', async () => {

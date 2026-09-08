@@ -42,7 +42,7 @@ function showYoutubeHelp(output = console.log, commandName = 'atris youtube') {
   output(`       ${commandName} watch tick`);
   output(`       ${commandName} <youtube-url> [options]`);
   output('');
-  output('search = free local discovery (ytsearch / yt-dlp), returns youtu.be links; rich free search prints one failing check; hands off to teach');
+  output('search = free local discovery (ytsearch / yt-dlp), returns youtu.be links; rich free search writes one apply and a failing keep/revert pack; thin hands off to teach');
   output('search --paid = 5 credits, watch permalinks + titles from Atris; rich paid search prints one failing check; hands off to teach');
   output('notes = free local notes to stdout; ephemeral unless --save; hands off to teach');
   output('teach = one chapter from local captions; bare teach resumes unpaid checks, then the next chapter after recap or skip');
@@ -2005,8 +2005,8 @@ function showYoutubeSearchHelp(output = console.log, commandName = 'atris youtub
   output('');
   output('Free local discovery. Uses ytsearch on PATH when present, else the');
   output('bundled scripts/det/ytsearch, else yt-dlp ytsearchN with the same print contract.');
-  output('Does not bill credits. A hit prints one next: atris youtube teach <first-url>.');
-  output('A rich hit prints one failing check (score 0). A thin hit prints check: fill this.');
+  output('Does not bill credits. A thin hit prints check: fill this and one next: atris youtube teach <first-url>.');
+  output('A rich hit writes one apply and a failing keep/revert pack (score 0).');
   output('');
   output(`--paid buys watch permalinks from Atris (${PAID_SEARCH_COST_HINT}).`);
   output('Requires login. Same auth path as atris youtube process.');
@@ -2368,11 +2368,114 @@ function searchLessonText(rows) {
     .join('\n');
 }
 
+function searchExperimentSlug(query) {
+  return `search-${applyGate.applySlug(query)}`;
+}
+
+function searchExperimentRel(query) {
+  return `atris/experiments/${searchExperimentSlug(query)}`;
+}
+
+function searchApplyRel(query) {
+  return applyGate.applySidecarRel('search', applyGate.applySlug(query));
+}
+
+function searchApplyNow(now) {
+  if (typeof now === 'function') {
+    const value = now();
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) return value;
+    const ms = Number(value);
+    if (Number.isFinite(ms) && ms > 0) return new Date(ms).toISOString().slice(0, 10);
+    return undefined;
+  }
+  return now;
+}
+
+function saveRichSearch({ cwd, query, lesson } = {}) {
+  if (isThinTeachLesson(lesson)) {
+    return { thin: true, packRel: null, lesson };
+  }
+  if (cwd) fs.mkdirSync(path.join(cwd, 'atris', 'wiki'), { recursive: true });
+  const packRel = fileTeachExperiment({
+    cwd,
+    lesson,
+    slug: query ? searchExperimentSlug(query) : null,
+    applyRel: query ? searchApplyRel(query) : null,
+  });
+  return { thin: false, packRel, lesson, source: query };
+}
+
+function ensureSearchApply({ cwd, query, packRel, now, output, source } = {}) {
+  const pack = packRel || (query ? searchExperimentRel(query) : null);
+  const slug = pack ? path.basename(pack) : null;
+  if (cwd) fs.mkdirSync(path.join(cwd, 'atris', 'wiki'), { recursive: true });
+  return applyGate.ensureApply({
+    cwd,
+    source: source || query || 'search',
+    rel: query ? searchApplyRel(query) : null,
+    now,
+    output,
+    incompleteMessage: slug
+      ? `next: atris experiments keep ${slug}`
+      : applyGate.ephemeralApplyMessage('search'),
+    required: false,
+    change: pack ? `apply ${pack}` : undefined,
+    receipt: pack ? TEACH_KEEP_RULE : undefined,
+    journalLine: pack ? `- [claimable] apply: ${pack}. ${TEACH_KEEP_RULE}` : undefined,
+  });
+}
+
+function mintRichSearch({ cwd, query, rows, now, output, ensureApply, json } = {}) {
+  const print = typeof output === 'function' ? output : (line = '') => console.log(line);
+  const lesson = notesLessonFromText(searchLessonText(rows));
+  if (json) return { thin: false, code: 0, lesson };
+  if (isThinTeachLesson(lesson)) {
+    printSearchLearnerGate(rows, { json: false }, print);
+    return { thin: true, code: 0, lesson };
+  }
+  const saved = saveRichSearch({ cwd, query, lesson });
+  const applyFn = ensureApply || ensureSearchApply;
+  const applyCode = applyFn({
+    cwd,
+    query,
+    packRel: saved.packRel,
+    now: searchApplyNow(now),
+    output: print,
+    source: query,
+  });
+  if (ensureApply) return { thin: false, code: applyCode, lesson: saved.lesson };
+  const baseline = proveSavedLearnerBaseline({
+    cwd,
+    applyRel: query ? searchApplyRel(query) : null,
+    lesson: saved.lesson,
+    output: print,
+    json,
+  });
+  if (baseline !== 0) return { thin: false, code: baseline, lesson: saved.lesson };
+  return { thin: false, code: applyCode, lesson: saved.lesson };
+}
+
 function printSearchLearnerGate(rows, options, output) {
   printLearnerCheckGate(output, notesLessonFromText(searchLessonText(rows)), {
     includeCheck: true,
     json: Boolean(options && options.json),
   });
+}
+
+function printSearchOutcome(rows, options, output, deps = {}) {
+  printSearchRows(rows, options, output);
+  if (options && options.json) return 0;
+  const minted = mintRichSearch({
+    cwd: deps.cwd || process.cwd(),
+    query: options && options.query,
+    rows,
+    now: deps.now,
+    output,
+    ensureApply: deps.ensureApply,
+    json: false,
+  });
+  if (minted.thin) printSearchTeachNext(rows, options, output);
+  return minted.code;
 }
 
 function resultStdout(result) {
@@ -2386,10 +2489,7 @@ function searchRowsFromResult(result) {
 
 function finishSuccessfulSearch(rows, options, output, deps) {
   writeLocalSearchCache(options.query, rows, deps);
-  printSearchRows(rows, options, output);
-  printSearchLearnerGate(rows, options, output);
-  printSearchTeachNext(rows, options, output);
-  return 0;
+  return printSearchOutcome(rows, options, output, deps);
 }
 
 function commandOnPath(name, deps = {}) {
@@ -2531,11 +2631,9 @@ async function runYoutubeSearch(args = [], deps = {}) {
       const cached = readFreshLocalSearchCache(options.query, deps);
       if (cached) {
         const cachedRows = cached.rows.slice(0, options.limit);
-        printSearchRows(cachedRows, options, output);
-        printSearchLearnerGate(cachedRows, options, output);
-        printSearchTeachNext(cachedRows, options, output);
+        const code = printSearchOutcome(cachedRows, options, output, deps);
         output(LOCAL_SEARCH_CACHE_NOTE);
-        return 0;
+        return code;
       }
       output(LOCAL_SEARCH_RATE_LIMIT_MESSAGE);
       return status == null ? 1 : status;
@@ -3755,6 +3853,10 @@ module.exports = {
   watchExperimentSlug,
   processExperimentSlug,
   processApplyRel,
+  searchExperimentSlug,
+  searchApplyRel,
+  saveRichSearch,
+  mintRichSearch,
   firstRichWatchLesson,
   fileTeachExperiment,
   youtubeCommand,
