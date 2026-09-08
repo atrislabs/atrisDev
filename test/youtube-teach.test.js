@@ -15,6 +15,7 @@ const {
   extractTeachNumbers,
   extractTeachMechanisms,
   extractTeachSource,
+  readLocalCaptionText,
   parseYtDlpInfoJson,
   oneTeachCheck,
   learnerCheckFromLesson,
@@ -1110,6 +1111,59 @@ test('extractTeachSource keeps parseable yt-dlp json when yt-dlp exits 429', asy
   assert.match(source.cues[0].text, /80 people/);
 });
 
+test('extractTeachSource keeps a written vtt when caption fetch fails after 429 json', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-vtt-'));
+  fs.writeFileSync(path.join(workDir, 'yt_teach01.en.vtt'), TEACH_VTT);
+
+  const source = await extractTeachSource(TEACH_URL, {
+    workDir,
+    spawnSync: () => ({
+      status: 1,
+      stdout: JSON.stringify({
+        id: 'teach01',
+        title: 'DHH on Lex Fridman',
+        duration: 900,
+        chapters: TEACH_CHAPTERS,
+        automatic_captions: {
+          en: [{ ext: 'vtt', url: 'https://www.youtube.com/api/timedtext?v=teach01' }],
+        },
+      }),
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => null,
+  });
+
+  assert.equal(source.id, 'teach01');
+  assert.equal(source.chapters.length, 2);
+  assert.equal(source.cues.length, 3);
+  assert.match(source.cues[0].text, /80 people/);
+  assert.match(readLocalCaptionText({ url: TEACH_URL, workDir }), /80 people/);
+});
+
+test('extractTeachSource still fails when caption fetch fails and no vtt was written', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-novtt-'));
+  const source = await extractTeachSource(TEACH_URL, {
+    workDir,
+    spawnSync: () => ({
+      status: 1,
+      stdout: JSON.stringify({
+        id: 'teach01',
+        title: 'DHH on Lex Fridman',
+        duration: 900,
+        chapters: TEACH_CHAPTERS,
+        automatic_captions: {
+          en: [{ ext: 'vtt', url: 'https://www.youtube.com/api/timedtext?v=teach01' }],
+        },
+      }),
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => null,
+  });
+
+  assert.equal(source, null);
+  assert.equal(readLocalCaptionText({ url: TEACH_URL, workDir }), '');
+});
+
 test('extractTeachSource still fails when 429 stdout is empty or broken', async () => {
   const empty = await extractTeachSource(TEACH_URL, {
     spawnSync: () => ({
@@ -1154,6 +1208,38 @@ test('youtube teach keeps the lesson when yt-dlp exits 429 with json', async () 
       stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
     }),
     fetchCaptionText: async () => TEACH_VTT,
+  });
+
+  assert.equal(status, 0);
+  assert.match(out.text(), /section 1\/2  omakase/);
+  assert.match(out.text(), /check\nwhat is the omakase model\?/);
+  assert.doesNotMatch(out.text(), /no english captions|429|Too Many Requests/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris')), false);
+});
+
+test('youtube teach keeps the lesson from a written vtt when caption fetch fails', async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-keepvtt-'));
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-keepvtt-notes-'));
+  fs.writeFileSync(path.join(workDir, 'yt_teach01.en.vtt'), TEACH_VTT);
+  const out = collect();
+  const status = await youtubeCommand(['teach', TEACH_URL], {
+    cwd,
+    workDir,
+    output: out.output,
+    spawnSync: () => ({
+      status: 1,
+      stdout: JSON.stringify({
+        id: 'teach01',
+        title: 'DHH on Lex Fridman',
+        duration: 900,
+        chapters: TEACH_CHAPTERS,
+        automatic_captions: {
+          en: [{ ext: 'vtt', url: 'https://www.youtube.com/api/timedtext?v=teach01' }],
+        },
+      }),
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => null,
   });
 
   assert.equal(status, 0);
