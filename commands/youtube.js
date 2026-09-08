@@ -703,7 +703,18 @@ function notesWorkDir(deps = {}) {
   return deps.workDir || path.join(process.env.TMPDIR || '/tmp', 'ytnotes');
 }
 
-function keptPrintedNotes({ url, workDir } = {}) {
+function notesRunnerDetail(result) {
+  return String(
+    (result && result.stderr) || (result && result.error && result.error.message) || '',
+  ).trim();
+}
+
+function isNotesRateLimited(result) {
+  return LOCAL_SEARCH_RATE_LIMIT_RE.test(notesRunnerDetail(result));
+}
+
+function keptPrintedNotes({ url, workDir, result } = {}) {
+  if (result != null && !isNotesRateLimited(result)) return false;
   return Boolean(String(readNotesText({ url, workDir }) || '').trim());
 }
 
@@ -1677,15 +1688,20 @@ function runOneNotesItem(item, engine, deps = {}) {
   }
 
   const started = readNowMs(deps);
-  let status = 1;
+  let result = { status: 1 };
   try {
-    status = readRunnerStatus(invokeNotesRunner(item.url, engine, deps));
-  } catch {
-    status = 1;
+    result = invokeNotesRunner(item.url, engine, deps);
+  } catch (err) {
+    result = { status: 1, stderr: String((err && err.message) || err || '') };
   }
+  const status = readRunnerStatus(result);
   let brief = null;
   let lesson = null;
-  let ok = status === 0 || keptPrintedNotes({ url: item.url, workDir: notesWorkDir(deps) });
+  let ok = status === 0 || keptPrintedNotes({
+    url: item.url,
+    workDir: notesWorkDir(deps),
+    result,
+  });
   if (ok && deps.save) {
     const saved = saveRichNotes(item.url, deps);
     if (saved.thin) {
@@ -1776,7 +1792,11 @@ function runSingleYoutubeNotes(url, engine, deps = {}) {
     result = { status: 1 };
   }
   const status = readRunnerStatus(result);
-  if (status !== 0 && !keptPrintedNotes({ url, workDir: notesWorkDir(deps) })) {
+  if (status !== 0 && !keptPrintedNotes({
+    url,
+    workDir: notesWorkDir(deps),
+    result,
+  })) {
     return status == null ? 1 : status;
   }
   const output = deps.output || ((line = '') => console.error(line));
