@@ -12,6 +12,16 @@ const {
   getStats,
   exportMarkdown,
 } = require('../lib/learnings');
+const applyGate = require('../lib/apply-gate');
+const {
+  fileTeachExperiment,
+  extractTeachNumbers,
+  extractTeachMechanisms,
+  isThinTeachLesson,
+  proveSavedLearnerBaseline,
+} = require('./youtube');
+
+const KEEP_RULE = 'keep only if measure.py moves 0→1. scores 1 only when the fixture contains the check tokens.';
 
 function showRecent(limit = 20) {
   const learnings = loadLearnings()
@@ -239,24 +249,101 @@ function printLearnLogSchema(stream = console.error) {
   for (const line of learnLogSchemaLines()) stream(`  ${line}`);
 }
 
+function learnExperimentSlug(key) {
+  return `learn-${applyGate.applySlug(key)}`;
+}
+
+function learnExperimentRel(key) {
+  return `atris/experiments/${learnExperimentSlug(key)}`;
+}
+
+function learnApplyRel(key) {
+  return applyGate.applySidecarRel('learn', applyGate.applySlug(key));
+}
+
+function learnLessonFromText(text) {
+  const body = String(text || '');
+  return {
+    numbers: extractTeachNumbers(body),
+    mechanisms: extractTeachMechanisms(body),
+  };
+}
+
+function saveRichLearn({ cwd, key, insight } = {}) {
+  const lesson = learnLessonFromText(insight);
+  if (isThinTeachLesson(lesson)) {
+    return { thin: true, packRel: null, lesson };
+  }
+  if (cwd) fs.mkdirSync(path.join(cwd, 'atris', 'wiki'), { recursive: true });
+  const packRel = fileTeachExperiment({
+    cwd,
+    lesson,
+    slug: key ? learnExperimentSlug(key) : null,
+    applyRel: key ? learnApplyRel(key) : null,
+  });
+  return { thin: false, packRel, lesson };
+}
+
+function ensureLearnApply({ cwd, key, packRel, now, output } = {}) {
+  const pack = packRel || (key ? learnExperimentRel(key) : null);
+  const slug = pack ? path.basename(pack) : null;
+  return applyGate.ensureApply({
+    cwd,
+    source: key ? `learn:${key}` : 'learn',
+    rel: key ? learnApplyRel(key) : null,
+    now,
+    output,
+    incompleteMessage: slug
+      ? `next: atris experiments keep ${slug}`
+      : applyGate.ephemeralApplyMessage('learning'),
+    required: false,
+    change: pack ? `apply ${pack}` : undefined,
+    receipt: pack ? KEEP_RULE : undefined,
+    journalLine: pack ? `- [claimable] apply: ${pack}. ${KEEP_RULE}` : undefined,
+  });
+}
+
+function mintRichLearn({ cwd, key, insight, now, output } = {}) {
+  const print = typeof output === 'function' ? output : (line = '') => console.log(line);
+  const saved = saveRichLearn({ cwd, key, insight });
+  if (saved.thin) return 0;
+  ensureLearnApply({
+    cwd,
+    key,
+    packRel: saved.packRel,
+    now,
+    output: print,
+  });
+  return proveSavedLearnerBaseline({
+    cwd,
+    applyRel: key ? learnApplyRel(key) : null,
+    lesson: saved.lesson,
+    output: print,
+  });
+}
+
 /**
  * Non-interactive log: `atris learn log '{"type":"pattern","key":"...","insight":"...","confidence":8,"source":"observed"}'`
  * For agents and scripts, no prompts, no quality gate.
  * Aliases: title→key, detail→insight.
  */
-function logDirect(jsonStr) {
+function logDirect(jsonStr, deps = {}) {
+  const error = typeof deps.error === 'function' ? deps.error : (line = '') => console.error(line);
+  const print = typeof deps.output === 'function' ? deps.output : (line = '') => console.log(line);
+  const exit = typeof deps.exit === 'function' ? deps.exit : (code) => process.exit(code);
+  const cwd = deps.cwd || process.cwd();
   if (!jsonStr) {
-    console.error('  ✗ Usage: atris learn log \'<json>\'');
-    printLearnLogSchema();
-    process.exit(1);
+    error('  ✗ Usage: atris learn log \'<json>\'');
+    printLearnLogSchema(error);
+    return exit(1);
   }
   let data;
   try {
     data = JSON.parse(jsonStr);
   } catch (err) {
-    console.error(`  ✗ Invalid JSON: ${err.message}`);
-    printLearnLogSchema();
-    process.exit(1);
+    error(`  ✗ Invalid JSON: ${err.message}`);
+    printLearnLogSchema(error);
+    return exit(1);
   }
   try {
     const entry = addLearning({
@@ -267,11 +354,20 @@ function logDirect(jsonStr) {
       source: data.source || 'observed',
       files: data.files || [],
     });
-    console.log(`  ✓ [${entry.confidence}/10] ${entry.type}/${entry.key}`);
+    print(`  ✓ [${entry.confidence}/10] ${entry.type}/${entry.key}`);
+    const baseline = mintRichLearn({
+      cwd,
+      key: entry.key,
+      insight: entry.insight,
+      now: deps.now,
+      output: print,
+    });
+    if (baseline !== 0) return exit(baseline);
+    return 0;
   } catch (err) {
-    console.error(`  ✗ ${err.message}`);
-    printLearnLogSchema();
-    process.exit(1);
+    error(`  ✗ ${err.message}`);
+    printLearnLogSchema(error);
+    return exit(1);
   }
 }
 
@@ -376,7 +472,7 @@ function showLearnHelp() {
   console.log('  Commands:');
   console.log('    (none)     Show recent learnings');
   console.log('    add        Add a learning interactively');
-  console.log('    log <json> Add programmatically (for agents)');
+  console.log('    log <json> Add programmatically (for agents). A rich insight (number or named mechanism) mints one apply plus a failing measure.py.');
   console.log('    search <q> Search learnings by keyword');
   console.log('    harvest    Extract learnings from journal Notes');
   console.log('    prune      Check for stale/contradictory entries');
@@ -437,5 +533,13 @@ function learnAtris(subcommand, ...args) {
 }
 
 learnAtris.getLearningCount = getLearningCount;
+learnAtris.learnExperimentSlug = learnExperimentSlug;
+learnAtris.learnExperimentRel = learnExperimentRel;
+learnAtris.learnApplyRel = learnApplyRel;
+learnAtris.learnLessonFromText = learnLessonFromText;
+learnAtris.saveRichLearn = saveRichLearn;
+learnAtris.ensureLearnApply = ensureLearnApply;
+learnAtris.mintRichLearn = mintRichLearn;
+learnAtris.logDirect = logDirect;
 
 module.exports = learnAtris;

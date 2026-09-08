@@ -121,7 +121,7 @@ rg "isAtrisCliRepo|refuse outside|--here|benchCommand" commands/bench.js test/do
 rg "whoCommand|parseScopeFlag|--global|filterProcessesToWorkspace" commands/who.js lib/cli-scope.js test/dogfood-pass2-t1-t5.test.js  # who defaults to workspace scope; --global for machine
 rg "founderCommand|--global|singleRepo|defaultScanRoot|isFreshWorkspace" commands/founder.js test/dogfood-pass2-t1-t5.test.js test/founder.test.js  # founder defaults to this workspace after a room exists; --global scans siblings; empty folders first-talk and write nothing
 rg "teachRoot|atris/teach|only reads" commands/teach.js test/dogfood-pass2-t1-t5.test.js  # teach reads ./atris/teach only
-rg "showLearnHelp|learnAtris|learn help|learnLogSchemaLines|title→key|detail→insight" commands/learn.js test/commands.test.js test/dogfood-papercuts.test.js # Project learnings + schema on help/validation + title/detail aliases
+rg "showLearnHelp|learnAtris|learn help|learnLogSchemaLines|title→key|detail→insight|mintRichLearn|saveRichLearn|learnExperimentSlug|proveSavedLearnerBaseline" commands/learn.js commands/youtube.js test/commands.test.js test/dogfood-papercuts.test.js test/learn-save.test.js # Project learnings + schema on help/validation + title/detail aliases. Rich `learn log` (number-with-units or named mechanism, same bar as youtube notes/teach) mints `atris/experiments/learn-<key>/` through `fileTeachExperiment` and one apply sidecar, then `proveSavedLearnerBaseline` prints `score: 0` only when that Apply starts failing. Thin log stays jsonl only.
 rg "showSoulHelp|async function soul|soul help" commands/soul.js test/commands.test.js # Soul/persona command + workspace-free help
 rg "workspace-free help smoke|showSearchHelp|showLearnHelp|showSoulHelp|showHelpShort|showHelpAll|help --all|help --json|already won|later|spaceship|recap|review|stop" bin/atris.js commands/learn.js commands/soul.js test/commands.test.js test/golden-path-help.test.js test/dogfood-papercuts.test.js test/dogfood-p0-safety.test.js  # Help surfaces: short first-minute doors, --all opens the same first-minute sentence then later/do/spaceship/autopilot/mission/recap/review/stop plus the long catalog, --json; default help has no em dash and no claim/ready/proof; --all has no box banner or MAP/journal lecture at the top
 rg "resolveFunctionalOwner|explicit_member_owner|remap_reason|engine_owner_resolved" lib/functional-owner.js commands/mission.js test/dogfood-papercuts.test.js test/mission-status.test.js  # Keep existing member owners; document remap_reason when engines remap
@@ -393,6 +393,7 @@ rg "outbound artifact gate|raw-html-in-plain-body|render-proof-missing|coach-sur
 - `atris/experiments/digest-<date>/` - minted by rich `atris youtube digest` through the same `fileTeachExperiment` helper (`commands/youtube.js:1034` `saveRichDigest`, slug at `commands/youtube.js:1002`); same keep-0-to-1 rule, apply sidecar `digest-<date>.apply.md`, thin digest writes no pack.
 - `atris/experiments/watch-<videoid>/` - minted by the first rich brief on `atris youtube watch tick` through the same `fileTeachExperiment` helper (`commands/youtube.js:1094` `saveRichWatch`, pick at `commands/youtube.js:1085` `firstRichWatchLesson`, slug at `commands/youtube.js:1047`); same keep-0-to-1 rule, apply sidecar `watch-<id>.apply.md`, all-thin watch tick writes no pack.
 - `atris/experiments/x-search-<slug>/` - minted by rich `atris x-search --save` through the same `fileTeachExperiment` helper (`commands/youtube.js:2655`, called from `commands/x-search.js:521` `saveRichXSearch`, slug at `commands/x-search.js:419`); same keep-0-to-1 rule, apply sidecar `x-search-<slug>.apply.md`, thin `--save` writes no pack. Default x-search without `--save` writes no pack (`commands/x-search.js:645`). `atris x-search unsave <query-or-source>` (`commands/x-search.js:498`) deletes this pack with the brief and apply sidecar; leftover pack-only still removes the pack.
+- `atris/experiments/learn-<key>/` - minted by rich `atris learn log` through the same `fileTeachExperiment` helper (`commands/learn.js` `saveRichLearn`, slug `learnExperimentSlug`); same keep-0-to-1 rule, apply sidecar `learn-<key>.apply.md`, thin log writes no pack.
 - **Value:** Makes self-improvement loops and scoreable benchmark runs first-class Atris CLI concepts instead of repo-local convention
 
 **Search:** `rg "experimentsCommand|experimentsKeep|experimentsRevert|printKeepRevertNext|printRevertKeepNext|printKeepWatchTickNext|runMeasureJson|runResetScript|experimentsRun|experimentsCompare|experimentsReplay|buildBenchmarkArtifact|ensureExperimentsFramework|experimentsDaily|experimentsQueue|sessionstart-plant|teach-thin-save|fileTeachExperiment|ensureTeachApply|teachExperimentSlug|notesExperimentSlug|digestExperimentSlug|watchExperimentSlug|saveRichNotes|saveRichDigest|ensureDigestApply|saveRichWatch|ensureWatchApply|xSearchExperimentSlug|saveRichXSearch|unsaveXSearch" commands/experiments.js commands/init.js lib/experiments/daily.js commands/autoland.js commands/youtube.js commands/x-search.js atris/experiments/sessionstart-plant atris/experiments/teach-thin-save`
@@ -1437,12 +1438,13 @@ rg "printRoster|registryPayload|canPersistEngineRegistry|speakFirstMinute|--glob
 **Purpose:** Store and inspect reusable project patterns, pitfalls, preferences, architecture notes, and tool lessons.
 
 - **Entry point:** `bin/atris.js:1574-1577` routes to `commands/learn.js`
-- **Handler:** `commands/learn.js:367-411` (`learnAtris`)
-- **Help:** `commands/learn.js:350-364` (`showLearnHelp`) and `commands/learn.js:368-371` short-circuit help before workspace checks
-- **Regression:** `test/commands.test.js:3731-3745` covers `learn --help`, `learn -h`, and `learn help` without temp workspace state
-- **Value:** Agents can inspect and add compounding memory without conflating it with journal search or Atris lessons.
+- **Handler:** `commands/learn.js` (`learnAtris`)
+- **Help:** `showLearnHelp` short-circuits help before workspace checks
+- **Rich log mint:** `commands/learn.js` `mintRichLearn` / `saveRichLearn` / `ensureLearnApply`. A rich `atris learn log` insight (number-with-units or named mechanism) mints `atris/experiments/learn-<key>/` plus `atris/wiki/briefs/learn-<key>.apply.md`, prints `next: atris experiments keep learn-<key>`, then `proveSavedLearnerBaseline` prints `score: 0` only when that sidecar starts failing. Thin log stays jsonl only.
+- **Regression:** `test/commands.test.js` covers `learn --help`; `test/learn-save.test.js` covers rich mint + failing baseline and thin jsonl-only; `test/dogfood-papercuts.test.js` covers title/detail aliases
+- **Value:** Agents can inspect and add compounding memory without conflating it with journal search or Atris lessons. A rich YouTube/X lesson captured through learn becomes one claimable Apply.
 
-**Search:** `rg "showLearnHelp|learnAtris|learn help" commands/learn.js test/commands.test.js`
+**Search:** `rg "showLearnHelp|learnAtris|learn help|mintRichLearn|saveRichLearn" commands/learn.js test/learn-save.test.js test/commands.test.js`
 
 ### Feature: Soul (`atris soul`)
 
