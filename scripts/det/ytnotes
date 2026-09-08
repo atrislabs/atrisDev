@@ -20,9 +20,10 @@ WORK="${TMPDIR:-/tmp}/ytnotes"
 mkdir -p "$WORK"
 cd "$WORK"
 
-# Printed metadata and a written VTT are a hit even when yt-dlp exits 429.
+# Printed metadata and a written English VTT are a hit even when yt-dlp exits 429.
+# Auto English is often en-orig / en-US / en-GB, the same list teach reads on disk.
 META=$(yt-dlp --no-update --quiet --no-warnings --skip-download \
-  --write-auto-subs --sub-format vtt --sub-langs en \
+  --write-auto-subs --sub-format vtt --sub-langs "en,en-orig,en-US,en-GB" \
   --no-simulate \
   -o "yt_%(id)s" \
   --print "%(id)s|%(title)s|%(channel)s|%(duration_string)s" \
@@ -30,8 +31,14 @@ META=$(yt-dlp --no-update --quiet --no-warnings --skip-download \
 ID="${META%%|*}"
 INFO="${META#*|}"
 
-VTT="yt_${ID}.en.vtt"
-if [ ! -s "$VTT" ]; then
+VTT=""
+for name in "yt_${ID}.en.vtt" "yt_${ID}.en-orig.vtt" "yt_${ID}.en-US.vtt" "yt_${ID}.en-GB.vtt"; do
+  if [ -s "$name" ]; then
+    VTT="$name"
+    break
+  fi
+done
+if [ -z "$VTT" ]; then
   echo "No English captions found for $URL. Falling back is manual (atris youtube process, 5 credits)." >&2
   exit 2
 fi

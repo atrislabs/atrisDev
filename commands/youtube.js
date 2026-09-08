@@ -418,6 +418,7 @@ function parseYtDlpInfoJson(result) {
 }
 
 function localCaptionNames(id) {
+  // scripts/det/ytnotes keeps the same VTT names (not clean.txt).
   return [
     `yt_${id}.en.vtt`,
     `yt_${id}.en-orig.vtt`,
