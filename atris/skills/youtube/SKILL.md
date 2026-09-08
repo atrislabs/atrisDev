@@ -1,7 +1,7 @@
 ---
 name: youtube
 description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 use printed rows if any; else the CLI retries once, then cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.18.8
+version: 2.18.9
 tags:
   - youtube
   - research
@@ -68,9 +68,9 @@ digest --> files brief + claimable journal
 
 --paid QUERY only if the user asked to buy permalinks
     |
-   rows --> rich: one failing check (score 0); thin: check: fill this
-        --> next: atris youtube teach <first-url>
-        --> --json stays quiet
+   rows --> rich: one pack-named apply + failing measure.py (score 0), then next: experiments keep
+        --> thin: check: fill this, then next: atris youtube teach <first-url>
+        --> --json stays quiet and writes no pack
 login: atris login --agent from a stored login
 never paste tokens, never /auth/cli
 ```
@@ -125,17 +125,18 @@ atris youtube search --paid "MCP agents 2026"
 atris youtube search --paid "MCP agents" --limit 10
 ```
 
-Requires a stored login, then `atris login --agent`. The CLI mints a youtube-scope agent token from disk the same way as `atris youtube process` and `atris x-search`. Never `/auth/cli`. Never paste tokens. Prints `title | watch permalink` plus credits. A rich hit prints one inferred check plus `score: 0`. A thin hit prints `check: fill this`. Then one next: `atris youtube teach <first-url>`. `--json` stays quiet. Empty or failed searches refund.
+Requires a stored login, then `atris login --agent`. The CLI mints a youtube-scope agent token from disk the same way as `atris youtube process` and `atris x-search`. Never `/auth/cli`. Never paste tokens. Prints `title | watch permalink` plus credits. A rich hit mints `atris/experiments/search-<query>/`, writes one pack-named Apply, and prints `score: 0` only when that Apply starts failing. A thin hit prints `check: fill this`, then one next teach command. `--json` stays quiet and writes no pack. Empty or failed searches refund.
 
 Line contract:
 
 ```text
-title | channel | duration | views | upload_date | https://youtu.be/ID
-check: <inferred or fill this>
-next: atris youtube teach "<first-url>"
+title | https://www.youtube.com/watch?v=ID
+Credits: N used, M remaining
+next: atris experiments keep search-<query>
+score: 0
 ```
 
-`upload_date` is `YYYYMMDD` (or `NA`) so callers can apply a freshness gate (for example last 6 weeks). `--json` stays machine-quiet. After the user picks a URL, run notes (free) or process (5 credits).
+A thin paid hit prints `check: fill this` and `next: atris youtube teach "<first-url>"` instead of the keep next. `--json` stays machine-quiet. After the user picks a URL, run notes (free) or process (5 credits).
 
 ---
 

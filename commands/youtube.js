@@ -43,7 +43,7 @@ function showYoutubeHelp(output = console.log, commandName = 'atris youtube') {
   output(`       ${commandName} <youtube-url> [options]`);
   output('');
   output('search = free local discovery (ytsearch / yt-dlp), returns youtu.be links; rich free search writes one apply and a failing keep/revert pack; thin hands off to teach');
-  output('search --paid = 5 credits, watch permalinks + titles from Atris; rich paid search prints one failing check; hands off to teach');
+  output('search --paid = 5 credits, watch permalinks + titles from Atris; rich paid search writes one apply and a failing keep/revert pack; thin hands off to teach');
   output('notes = free local notes to stdout; ephemeral unless --save; hands off to teach');
   output('teach = one chapter from local captions; bare teach resumes unpaid checks, then the next chapter after recap or skip');
   output('rich ephemeral notes/teach print one apply next-step and one failing check (no files)');
@@ -2010,8 +2010,8 @@ function showYoutubeSearchHelp(output = console.log, commandName = 'atris youtub
   output('');
   output(`--paid buys watch permalinks from Atris (${PAID_SEARCH_COST_HINT}).`);
   output('Requires login. Same auth path as atris youtube process.');
-  output('A hit also prints one next: atris youtube teach <first-url>.');
-  output('A rich hit prints one failing check (score 0). A thin hit prints check: fill this.');
+  output('A rich hit writes one apply and a failing keep/revert pack (score 0).');
+  output('A thin hit prints check: fill this and one next: atris youtube teach <first-url>.');
   output('Empty or failed paid search refunds the credits.');
   output('');
   output('Options:');
@@ -2356,9 +2356,7 @@ async function runPaidYoutubeSearch(options, deps = {}) {
     return 2;
   }
   output(rendered);
-  printSearchLearnerGate(videos, options, output);
-  printSearchTeachNext(videos, options, output);
-  return 0;
+  return gateSearchLearner(videos, options, output, deps);
 }
 
 function searchLessonText(rows) {
@@ -2462,8 +2460,7 @@ function printSearchLearnerGate(rows, options, output) {
   });
 }
 
-function printSearchOutcome(rows, options, output, deps = {}) {
-  printSearchRows(rows, options, output);
+function gateSearchLearner(rows, options, output, deps = {}) {
   if (options && options.json) return 0;
   const minted = mintRichSearch({
     cwd: deps.cwd || process.cwd(),
@@ -2476,6 +2473,11 @@ function printSearchOutcome(rows, options, output, deps = {}) {
   });
   if (minted.thin) printSearchTeachNext(rows, options, output);
   return minted.code;
+}
+
+function printSearchOutcome(rows, options, output, deps = {}) {
+  printSearchRows(rows, options, output);
+  return gateSearchLearner(rows, options, output, deps);
 }
 
 function resultStdout(result) {
