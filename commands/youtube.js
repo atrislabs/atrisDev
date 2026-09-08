@@ -2406,6 +2406,7 @@ async function runYoutubeSearch(args = [], deps = {}) {
       if (cached) {
         const cachedRows = cached.rows.slice(0, options.limit);
         printSearchRows(cachedRows, options, output);
+        printSearchLearnerGate(cachedRows, options, output);
         printSearchTeachNext(cachedRows, options, output);
         output(LOCAL_SEARCH_CACHE_NOTE);
         return 0;
