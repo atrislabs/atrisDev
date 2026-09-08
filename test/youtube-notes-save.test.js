@@ -216,6 +216,33 @@ test('youtube notes rich --save mints a measure.py that validate.py accepts', as
   assert.doesNotMatch(claim.sidecar, /omakase model/i);
 });
 
+test('youtube notes rich --save keeps the pack when the runner exits 429', async () => {
+  assert.ok(pythonCmd, 'python3 is required to score the minted pack');
+  const { cwd, workDir } = notesWorkspace('ntrate1', RICH_NOTES);
+  const out = collect();
+  const status = await youtubeCommand(['notes', 'https://www.youtube.com/watch?v=ntrate1', '--save'], {
+    cwd,
+    workDir,
+    now: '2026-08-26',
+    output: out.output,
+    runner: () => ({
+      status: 1,
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+  });
+
+  assert.equal(status, 0);
+  assert.equal(out.lines.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.match(out.text(), /next: atris experiments keep notes-ntrate1/);
+  assert.doesNotMatch(out.text(), /429|Too Many Requests|FAILED/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'notes-ntrate1', 'measure.py')), true);
+  const claim = assertNotesApplyClaimable(cwd, {
+    id: 'ntrate1',
+    tokens: ['omakase model', 'what is the omakase model?'],
+  });
+  assert.doesNotMatch(claim.sidecar, /omakase model/i);
+});
+
 test('two-url notes batch prints teach next for the first ok url', async () => {
   const first = 'https://www.youtube.com/watch?v=okfirst';
   const second = 'https://www.youtube.com/watch?v=oksecond';

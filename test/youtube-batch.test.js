@@ -493,6 +493,58 @@ test('playlist notes batch keeps printed videos when yt-dlp exits 429', async ()
   assert.doesNotMatch(log.text(), /FAILED|429|Too Many Requests|playlist expand failed/);
 });
 
+test('notes batch keeps written notes when the runner exits 429', async () => {
+  const firstUrl = 'https://www.youtube.com/watch?v=ntrate1';
+  const secondUrl = 'https://www.youtube.com/watch?v=ntrate2';
+  const { cwd, workDir } = richNotesWorkspace(['ntrate1', 'ntrate2']);
+  const log = collect();
+  const status = await youtubeCommand(['notes', firstUrl, secondUrl], {
+    cwd,
+    workDir,
+    output: log.output,
+    runner: () => ({
+      status: 1,
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+  });
+
+  assert.equal(status, 0);
+  assert.match(log.text(), /ntrate1  \d+s  ok/);
+  assert.match(log.text(), /ntrate2  \d+s  ok/);
+  assert.equal(log.lines.filter((line) => line === ephemeralApplyMessage('notes')).length, 1);
+  assert.equal(log.lines.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.equal(log.lines.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.deepEqual(
+    log.text().split('\n').filter((line) => line.startsWith('next: atris youtube teach')),
+    [`next: atris youtube teach "${firstUrl}"`],
+  );
+  assert.doesNotMatch(log.text(), /FAILED|429|Too Many Requests/);
+});
+
+test('notes batch still marks FAILED when 429 wrote no notes', async () => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-batch-empty429-'));
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-batch-empty429-notes-'));
+  const log = collect();
+  const status = await youtubeCommand([
+    'notes',
+    'https://www.youtube.com/watch?v=empty429',
+    'https://www.youtube.com/watch?v=empty430',
+  ], {
+    cwd,
+    workDir,
+    output: log.output,
+    runner: () => ({
+      status: 1,
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+  });
+
+  assert.equal(status, 2);
+  assert.match(log.text(), /empty429  \d+s  FAILED/);
+  assert.match(log.text(), /empty430  \d+s  FAILED/);
+  assert.doesNotMatch(log.text(), /score: 0|next: atris youtube teach/);
+});
+
 test('expandNotesTargets leaves a plain watch url untouched', () => {
   const items = expandNotesTargets(['https://www.youtube.com/watch?v=plain1'], {
     expander: () => {

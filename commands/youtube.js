@@ -699,6 +699,14 @@ function readNotesText({ url, workDir } = {}) {
   }
 }
 
+function notesWorkDir(deps = {}) {
+  return deps.workDir || path.join(process.env.TMPDIR || '/tmp', 'ytnotes');
+}
+
+function keptPrintedNotes({ url, workDir } = {}) {
+  return Boolean(String(readNotesText({ url, workDir }) || '').trim());
+}
+
 function saveRichNotes(url, deps = {}) {
   const workDir = deps.workDir || path.join(process.env.TMPDIR || '/tmp', 'ytnotes');
   const lesson = notesLessonFromText(readNotesText({ url, workDir }));
@@ -1677,7 +1685,7 @@ function runOneNotesItem(item, engine, deps = {}) {
   }
   let brief = null;
   let lesson = null;
-  let ok = status === 0;
+  let ok = status === 0 || keptPrintedNotes({ url: item.url, workDir: notesWorkDir(deps) });
   if (ok && deps.save) {
     const saved = saveRichNotes(item.url, deps);
     if (saved.thin) {
@@ -1765,10 +1773,12 @@ function runSingleYoutubeNotes(url, engine, deps = {}) {
   try {
     result = invokeNotesRunner(url, engine, deps);
   } catch {
-    return 1;
+    result = { status: 1 };
   }
   const status = readRunnerStatus(result);
-  if (status !== 0) return status;
+  if (status !== 0 && !keptPrintedNotes({ url, workDir: notesWorkDir(deps) })) {
+    return status == null ? 1 : status;
+  }
   const output = deps.output || ((line = '') => console.error(line));
   if (!deps.save) {
     const json = deps.json === true;
@@ -3543,6 +3553,7 @@ module.exports = {
   shouldRetryWithLocalTranscript,
   formatYoutubeResult,
   fileBriefFromNotes,
+  keptPrintedNotes,
   ensureNotesApply,
   unsaveYoutubeNotes,
   APPLY_NEXT_MESSAGE,
