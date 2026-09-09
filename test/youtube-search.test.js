@@ -909,7 +909,7 @@ test('youtube search --paid refuses on a fresh free-cache hit and does not bill'
       authCalls += 1;
       return { ok: true, token: 'should-not-mint' };
     },
-    ensureValidCredentials: async () => ({ credentials: { token: 'should-not-use' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'should-not-use', agent_token: 'should-not-use', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname) => {
       apiCalls += 1;
       return { ok: false, status: 500, error: `unexpected ${pathname}` };
@@ -934,7 +934,7 @@ test('youtube search --paid proceeds when the free cache is absent', async () =>
     ...cacheDeps({ fs: fsMock }),
     output: (line) => output.push(line),
     runner: () => ({ status: 0, stdout: '' }),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
       return {
@@ -977,7 +977,7 @@ test('youtube search --paid proceeds when the free cache is stale', async () => 
   const status = await youtubeCommand(['search', '--paid', 'MCP agents'], {
     ...cacheDeps({ fs: fsMock, now: () => now }),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
       return {
@@ -1017,7 +1017,7 @@ test('youtube search --paid posts /youtube/search and prints titles, permalinks,
       runnerCalls += 1;
       return { status: 0, stdout: '' };
     },
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
       return {
@@ -1073,7 +1073,7 @@ test('youtube search --paid prints keep next and score 0 after a rich title', as
     cwd,
     now: '2026-09-08',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -1124,7 +1124,7 @@ test('rich paid youtube search mints a measure.py that validate.py accepts and s
     cwd,
     now: '2026-09-08',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -1204,7 +1204,7 @@ test('youtube search --paid --json stays quiet and writes no pack after a rich t
     ...cacheDeps(),
     cwd,
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -1239,7 +1239,7 @@ test('youtube search --paid --json prints the raw payload', async () => {
   const status = await youtubeCommand(['search', '--paid', 'hello', '--json'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -1266,7 +1266,7 @@ test('youtube search --paid --json empty results stays json-only', async () => {
   const status = await youtubeCommand(['search', '--paid', 'nothing here', '--json'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -1286,7 +1286,7 @@ test('youtube search --paid empty results prints credits and exits 2', async () 
   const status = await youtubeCommand(['search', '--paid', 'nothing here'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -1311,7 +1311,7 @@ test('empty paid youtube search surfaces a server-side refund and does not inven
   const status = await youtubeCommand(['search', '--paid', 'quiet topic'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
       return {
@@ -1346,7 +1346,7 @@ test('502 paid youtube search with refunded credits surfaces them and does not i
   const status = await youtubeCommand(['search', '--paid', 'agents'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
       return {
@@ -1379,7 +1379,7 @@ test('502 paid youtube search with unused credits does not claim a refund', asyn
   const status = await youtubeCommand(['search', '--paid', 'agents'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: false,
       status: 502,
@@ -1407,7 +1407,7 @@ test('youtube search --paid surfaces 401 login hint', async () => {
   const status = await youtubeCommand(['search', '--paid', 'agents'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     loadCredentials: () => ({ token: 't' }),
     apiRequestJson: async () => ({
       ok: false,
@@ -1426,7 +1426,7 @@ test('youtube search --paid surfaces 402 credits hint', async () => {
   const status = await youtubeCommand(['search', '--paid', 'agents'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: false,
       status: 402,
@@ -1444,7 +1444,7 @@ test('402 paid youtube search with unused credits does not claim a refund', asyn
   const status = await youtubeCommand(['search', '--paid', 'agents'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: false,
       status: 402,
@@ -1470,7 +1470,7 @@ test('401 paid youtube search with unused credits does not claim a refund', asyn
   const status = await youtubeCommand(['search', '--paid', 'agents'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     loadCredentials: () => ({ token: 't' }),
     apiRequestJson: async () => ({
       ok: false,
@@ -1496,7 +1496,7 @@ test('402 paid youtube search still prints an explicit refund', async () => {
   const status = await youtubeCommand(['search', '--paid', 'agents'], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: false,
       status: 402,
@@ -1574,7 +1574,7 @@ async function runPaidSearchRemint(firstData, retryData, extraArgs = []) {
   const status = await youtubeCommand(['search', '--paid', 'agents', ...extraArgs], {
     ...cacheDeps(),
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'user-jwt' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'user-jwt', agent_token: 'user-jwt', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     loadCredentials: () => ({ token: 'user-jwt', refresh_token: 'refresh-jwt' }),
     persistMintedAgentToken: () => {},
     apiRequestJson: async (pathname, options) => {

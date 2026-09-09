@@ -159,7 +159,7 @@ test('unexpired agent_access token skips the user-token validation preflight', a
   }
 });
 
-test('expired agent_access token returns a mint hint without attempting refresh', async () => {
+test('expired agent_access token without refresh returns a mint hint', async () => {
   const dir = makeTempDir();
   const home = path.join(dir, 'home');
   const previousHome = process.env.HOME;
@@ -175,7 +175,7 @@ test('expired agent_access token returns a mint hint without attempting refresh'
   delete process.env.ATRIS_PROFILE;
   writeCredentials(home, {
     token,
-    refresh_token: 'must-not-refresh',
+    refresh_token: null,
     provider: 'atris',
   });
 
@@ -497,7 +497,8 @@ test('atris login --agent mints through the live CLI with mocked HTTP', async ()
     assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, /Choose login method|Opening browser|\/auth\/cli/);
 
     const stored = readCredentials(home);
-    assert.equal(stored.token, SECRET);
+    assert.equal(stored.token, 'stored-user-jwt');
+    assert.equal(stored.agent_token, SECRET);
     assert.equal(stored.refresh_token, 'stored-refresh-jwt');
     assert.equal(stored.email, 'owner@example.com');
   } finally {

@@ -78,7 +78,7 @@ function runSearch(query, { cwd, output, content = RICH_TEXT, extraArgs = [] } =
     cwd,
     applyNow: '2026-08-26',
     output,
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => mockSearch(content),
   });
 }
@@ -320,7 +320,7 @@ test('x-search person rich --save mints the same keep/revert pack', async () => 
     cwd,
     applyNow: '2026-08-26',
     output: out.output,
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => mockSearch(RICH_TEXT),
   });
 
@@ -436,7 +436,7 @@ test('x-search person rich --save then unsave removes the minted pack', async ()
     cwd,
     applyNow: '2026-08-26',
     output: () => {},
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => mockSearch(RICH_TEXT),
   });
   assert.equal(saveStatus, 0);

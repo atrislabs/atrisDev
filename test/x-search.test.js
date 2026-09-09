@@ -170,7 +170,7 @@ test('xSearchCommand prints content, citations, and credits', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
       return {
@@ -227,7 +227,7 @@ test('x-search --json stays quiet on check, score, and next lines', async () => 
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => successSearchData(
       '37signals has 80 people and uses the omakase model',
     ),
@@ -249,7 +249,7 @@ test('xSearchCommand --json prints raw payload', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -270,7 +270,7 @@ test('xSearchCommand surfaces 401 login hint', async () => {
   const output = [];
   const status = await xSearchCommand(['agents'], {
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     loadCredentials: () => ({ token: 't' }),
     apiRequestJson: async () => ({
       ok: false,
@@ -291,7 +291,7 @@ test('xSearchCommand surfaces 402 credits hint', async () => {
   const output = [];
   const status = await xSearchCommand(['agents'], {
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: false,
       status: 402,
@@ -309,7 +309,7 @@ test('402 x-search with unused credits does not claim a refund', async () => {
   const output = [];
   const status = await xSearchCommand(['agents'], {
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: false,
       status: 402,
@@ -336,7 +336,7 @@ test('401 x-search with unused credits does not claim a refund', async () => {
   const output = [];
   const status = await xSearchCommand(['agents'], {
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     loadCredentials: () => ({ token: 't' }),
     apiRequestJson: async () => ({
       ok: false,
@@ -362,7 +362,7 @@ test('402 x-search still prints an explicit refund', async () => {
   const output = [];
   const status = await xSearchCommand(['agents'], {
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: false,
       status: 402,
@@ -440,7 +440,7 @@ async function runXSearchRemint(firstData, retryData, extraArgs = []) {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'user-jwt' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'user-jwt', agent_token: 'user-jwt', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     loadCredentials: () => ({ token: 'user-jwt', refresh_token: 'refresh-jwt' }),
     persistMintedAgentToken: () => {},
     apiRequestJson: async (pathname, options) => {
@@ -579,7 +579,7 @@ test('xSearchCommand person posts to research-person', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: () => {},
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-abc' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-abc', agent_token: 'token-abc', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
       return {
@@ -616,7 +616,7 @@ test('x-search person --save refuses thin research text', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -644,7 +644,7 @@ test('empty x-search --save still does not owe an apply', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -683,7 +683,7 @@ test('x-search without --save stays stdout only', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => successSearchData(),
   });
 
@@ -705,7 +705,7 @@ test('x-search without --save prints fill-this when the result is thin', async (
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => successSearchData(
       'welcome back friends this is just a chat about feelings and vibes',
     ),
@@ -727,7 +727,7 @@ test('x-search without --save prints one apply next-step when the result is rich
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => successSearchData(
       '37signals has 80 people and uses the omakase model',
     ),
@@ -769,7 +769,7 @@ test('x-search person without --save prints one apply next-step when research is
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -805,7 +805,7 @@ test('x-search without --save does not rewrite an existing apply', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => successSearchData(),
   });
 
@@ -827,7 +827,7 @@ test('x-search --save refuses a thin result and writes no atris files', async ()
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => successSearchData(
       'welcome back friends this is just a chat about feelings and vibes',
     ),
@@ -848,7 +848,7 @@ test('empty x-search does not owe an apply', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -873,7 +873,7 @@ test('empty x-search prints one youtube search next-step', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -903,7 +903,7 @@ test('empty x-search --json stays json-only', async () => {
   const output = [];
   const status = await xSearchCommand(['quiet topic', '--json'], {
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -933,7 +933,7 @@ test('empty x-search surfaces a server-side refund and does not invent a refund 
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
       return {
@@ -972,7 +972,7 @@ test('empty citations payload does not claim a refund', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: true,
       status: 200,
@@ -998,7 +998,7 @@ test('failed x-search does not owe an apply', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: false,
       status: 502,
@@ -1022,7 +1022,7 @@ test('502 with refunded credits surfaces them and does not invent a refund call'
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
       return {
@@ -1059,7 +1059,7 @@ test('502 x-search with unused credits does not claim a refund', async () => {
     cwd,
     applyNow: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     apiRequestJson: async () => ({
       ok: false,
       status: 502,

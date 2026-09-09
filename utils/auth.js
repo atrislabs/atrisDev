@@ -352,9 +352,13 @@ function autoSaveProfile(credentials) {
   }
 }
 
-function saveCredentials(token, refreshToken, email, userId, provider) {
+function saveCredentials(token, refreshToken, email, userId, provider, extras = {}) {
+  if (decodeJwtClaims(token)?.type === 'agent_access') {
+    throw new Error('Refusing to save a scoped agent token as the login token; keep it under agent_token');
+  }
   const credentialsPath = getCredentialsPath();
   const credentials = {
+    ...extras,
     token,
     refresh_token: refreshToken || null,
     email: email || null,
@@ -374,7 +378,43 @@ function saveCredentials(token, refreshToken, email, userId, provider) {
   autoSaveProfile(credentials);
 }
 
-function loadCredentials() {
+// Supplying the auth client enables asynchronous repair. Local-only readers stay synchronous.
+function loadCredentials(apiRequestJson) {
+  const credentials = readCredentials();
+  if (!credentials || credentials.source || decodeJwtClaims(credentials.token)?.type !== 'agent_access') {
+    return credentials;
+  }
+  if (!credentials.refresh_token) {
+    console.error('atris login');
+    return credentials;
+  }
+  if (!apiRequestJson) return credentials;
+  return repairLoginCredentials(credentials, apiRequestJson);
+}
+
+async function repairLoginCredentials(credentials, apiRequestJson) {
+  const refreshed = await refreshAccessToken(credentials.refresh_token, null, apiRequestJson);
+  const token = refreshed.data?.access_token;
+  if (!refreshed.ok || !token || decodeJwtClaims(token)?.type === 'agent_access') {
+    throw new Error('Could not repair login file. Run atris login');
+  }
+  const claims = decodeJwtClaims(credentials.token);
+  const { source_profile, ...rest } = credentials;
+  const next = {
+    ...rest,
+    token,
+    refresh_token: refreshed.data.refresh_token || credentials.refresh_token,
+    agent_token: credentials.token,
+    agent_token_scopes: claims.scopes || [],
+    agent_token_expires_at: typeof claims.exp === 'number' ? new Date(claims.exp * 1000).toISOString() : null,
+  };
+  if (source_profile) saveProfile(source_profile, next);
+  else saveCredentials(token, next.refresh_token, next.email, next.user_id, next.provider, next);
+  console.error('Repaired login file: moved a scoped agent token aside.');
+  return { ...next, ...(source_profile ? { source_profile } : {}) };
+}
+
+function readCredentials() {
   // Priority: ATRIS_TOKEN env var → placed agent token → ATRIS_PROFILE env var
   // → per-terminal session file → global credentials.json. A fresh placed token
   // overrides a different env token because cloud images can carry a stale one.
@@ -552,7 +592,7 @@ async function performTokenRefresh(credentials, apiRequestJson) {
         saved_at: new Date().toISOString(),
       });
     } else {
-      saveCredentials(accessToken, newRefreshToken, email, userId, provider);
+      saveCredentials(accessToken, newRefreshToken, email, userId, provider, credentials);
     }
   };
 
@@ -586,7 +626,7 @@ async function performTokenRefresh(credentials, apiRequestJson) {
           saved_at: new Date().toISOString(),
         });
       } else {
-        saveCredentials(accessToken, newRefreshToken, updatedEmail, updatedUserId, updatedProvider);
+        saveCredentials(accessToken, newRefreshToken, updatedEmail, updatedUserId, updatedProvider, credentials);
       }
       latestCreds = loadCredentials();
     }
@@ -603,7 +643,7 @@ async function performTokenRefresh(credentials, apiRequestJson) {
 }
 
 async function ensureValidCredentials(apiRequestJson, options = {}) {
-  let credentials = loadCredentials();
+  let credentials = await loadCredentials(apiRequestJson);
   if (!credentials || !credentials.token) {
     return { error: 'not_logged_in' };
   }
@@ -659,7 +699,8 @@ async function ensureValidCredentials(apiRequestJson, options = {}) {
           credentials.refresh_token,
           updatedEmail,
           updatedUserId,
-          updatedProvider
+          updatedProvider,
+          credentials
         );
       }
     }

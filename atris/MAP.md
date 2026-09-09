@@ -6,6 +6,8 @@
 
 ## Quick Reference Index
 
+- Login token isolation: `utils/auth.js:355` refuses scoped tokens in the login field; `loadCredentials(apiRequestJson)` repairs legacy files through refresh for authenticated callers while synchronous local reads stay offline. `commands/auth.js:88` stores minted keys in `agent_token` with scope/expiry metadata, and billed commands reuse only valid scoped keys. Regression: `test/auth-login-storage.test.js`, `test/auth-agent-token.test.js`, `test/billed-command-auth.test.js`.
+
 - Member alive dispatcher lookup: `lib/member-alive.js:64` prefers workspace scripts, then the packaged `scripts/member-operate.mjs`; `test/member-alive.test.js` verifies installed dispatch, workspace cwd, and override precedence.
 - Member alive execution results: `scripts/member-operate.mjs:38` reads multiline JSON and preserves explicit failures despite zero process exit. Explicit `--shared-checkout` passes through `commands/member.js` and `lib/member-alive.js`; developer isolation remains the default. Regression: `test/member-alive.test.js`.
 - Member execution proof: `scripts/member-operate.mjs` treats mission creation without execution as planned and detects errored mission ticks inside an otherwise successful response. `lib/member-alive.js` never substitutes a wake receipt for work proof; `commands/member.js` preserves planned and failed outcomes in the loop summary. Regression: `test/member-alive.test.js`.
@@ -1300,9 +1302,9 @@ rg "printRoster|registryPayload|canPersistEngineRegistry|speakFirstMinute|--glob
   1. Browser OAuth: opens `{APP_BASE}/auth/cli`, user pastes code, CLI exchanges via `POST /auth/cli/exchange`
   2. Manual token: user pastes raw token, saved + validated
   3. Non-interactive: `--token <t>` flag for CI/scripts
-- **Token refresh:** `utils/auth.js:518-603` (`performTokenRefresh`) saves new access token, optionally rotates refresh token, re-validates, updates user metadata. Profile-sourced creds write back to the profile file. `refreshAccessToken` (`:485`) sends `refresh_token` and omits `provider=google` unless the token is a Google OAuth refresh (`1//...`); that hint makes `/auth/refresh` skip app-JWT refresh and return `google_refresh_failed`.
-- **Credential guard:** `utils/auth.js:605-678` (`ensureValidCredentials`) checks selected-source and agent-JWT expiry, proactively refreshes within the 5-minute buffer, validates, then falls back to refresh
-- **Wake auth abort:** `utils/auth.js:500-516` (`isAuthFailure` / `abortOnAuthFailure`) stops status/wake polling on 401/403 and prints login guidance instead of a computer timeout. Used by `commands/terminal.js:35`, `commands/computer.js:2259`, `commands/aeo.js:98`, `commands/pull.js:361`, `commands/push.js:530`, `commands/align.js:180`.
+- **Token refresh:** `utils/auth.js:558` (`performTokenRefresh`) saves new access token, optionally rotates refresh token, re-validates, updates user metadata. Profile-sourced creds write back to the profile file. `refreshAccessToken` (`:525`) sends `refresh_token` and omits `provider=google` unless the token is a Google OAuth refresh (`1//...`); that hint makes `/auth/refresh` skip app-JWT refresh and return `google_refresh_failed`.
+- **Credential guard:** `utils/auth.js:645` (`ensureValidCredentials`) checks selected-source and agent-JWT expiry, proactively refreshes within the 5-minute buffer, validates, then falls back to refresh
+- **Wake auth abort:** `utils/auth.js:540` (`isAuthFailure` / `abortOnAuthFailure`) stops status/wake polling on 401/403 and prints login guidance instead of a computer timeout. Used by `commands/terminal.js:35`, `commands/computer.js:2259`, `commands/aeo.js:98`, `commands/pull.js:361`, `commands/push.js:530`, `commands/align.js:180`.
 - **Dependencies:** `utils/auth.js` for token management, `utils/api.js` for HTTP
 - **Consumers:**
   - `commands/auth.js` (login/logout/whoami) — uses modular `utils/auth.js`

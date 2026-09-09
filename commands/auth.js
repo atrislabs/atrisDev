@@ -1,4 +1,4 @@
-const { AGENT_TOKEN_EXPIRED_DETAIL, loadCredentials, saveCredentials, deleteCredentials, getCredentialsPath, openBrowser, promptUser, displayAccountSummary, ensureValidCredentials, loadProfile, listProfiles, profileNameFromEmail, deleteProfile, saveProfile, getTokenExpiryEpochSeconds, getTerminalSessionId, setSessionProfile, getSessionProfile, clearSessionProfile, cleanStaleSessions, getSessionsDir } = require('../utils/auth');
+const { AGENT_TOKEN_EXPIRED_DETAIL, decodeJwtClaims, loadCredentials, saveCredentials, deleteCredentials, getCredentialsPath, openBrowser, promptUser, displayAccountSummary, ensureValidCredentials, loadProfile, listProfiles, profileNameFromEmail, deleteProfile, saveProfile, getTokenExpiryEpochSeconds, getTerminalSessionId, setSessionProfile, getSessionProfile, clearSessionProfile, cleanStaleSessions, getSessionsDir } = require('../utils/auth');
 const { getAppBaseUrl, apiRequestJson } = require('../utils/api');
 const { isNonInteractive, wantsJson } = require('../lib/noninteractive');
 const { hasFlag, readFlag } = require('../lib/arg-parser');
@@ -87,18 +87,17 @@ function extractAgentTokenMeta(data, requested, token) {
 
 function persistMintedAgentToken(credentials, token, extras = {}) {
   const next = {
-    token,
+    ...credentials,
     refresh_token: extras.refresh_token || credentials.refresh_token || null,
-    email: credentials.email || null,
-    user_id: credentials.user_id || null,
-    provider: credentials.provider || null,
-    saved_at: extras.saved_at || new Date().toISOString(),
+    agent_token: token,
+    agent_token_scopes: extras.scopes || [],
+    agent_token_expires_at: extras.expiresAt || null,
   };
   if (credentials.source_profile) {
     saveProfile(credentials.source_profile, next);
     return next;
   }
-  saveCredentials(next.token, next.refresh_token, next.email, next.user_id, next.provider);
+  saveCredentials(next.token, next.refresh_token, next.email, next.user_id, next.provider, next);
   return next;
 }
 
@@ -139,7 +138,7 @@ async function mintScopedAgentToken(requested = {}, deps = {}) {
     ? requested.dailyCreditCap
     : DEFAULT_DAILY_CREDIT_CAP;
 
-  const credentials = load() || {};
+  const credentials = await load(api) || {};
   const accessToken = firstNonEmptyString(credentials.token);
   const refreshToken = firstNonEmptyString(credentials.refresh_token);
   if (!accessToken && !refreshToken) {
@@ -172,7 +171,9 @@ async function mintScopedAgentToken(requested = {}, deps = {}) {
     return { ok: false, code: 'missing_token', error: 'backend did not return an agent token' };
   }
 
+  const meta = extractAgentTokenMeta(result.data, { scopes, dailyCreditCap }, minted);
   persist(credentials, minted, {
+    ...meta,
     refresh_token: firstNonEmptyString(result.data && result.data.refresh_token) || refreshToken,
     saved_at: now(),
   });
@@ -180,7 +181,8 @@ async function mintScopedAgentToken(requested = {}, deps = {}) {
   return {
     ok: true,
     token: minted,
-    meta: extractAgentTokenMeta(result.data, { scopes, dailyCreditCap }, minted),
+    meta,
+    storedIn: credentials.source_profile ? `profile ${credentials.source_profile}, agent_token` : '~/.atris/credentials.json, agent_token',
   };
 }
 
@@ -191,23 +193,20 @@ async function ensureBilledCommandAuth(scope, deps = {}) {
   }
 
   const api = deps.apiRequestJson || apiRequestJson;
-  const ensureFn = deps.ensureValidCredentials || ensureValidCredentials;
   const load = deps.loadCredentials || loadCredentials;
   const mint = deps.mintScopedAgentToken || mintScopedAgentToken;
 
-  if (!deps.forceMint) {
-    const ensured = await ensureFn(api);
-    if (ensured && ensured.credentials && ensured.credentials.token) {
-      return {
-        ok: true,
-        token: ensured.credentials.token,
-        minted: false,
-        credentials: ensured.credentials,
-      };
-    }
+  const ensured = !deps.forceMint && deps.ensureValidCredentials
+    ? await deps.ensureValidCredentials(api) : null;
+  const credentials = ensured?.credentials || await load(api) || {};
+  const candidate = credentials.agent_token || ((credentials.source === 'env' || credentials.source === 'agent_token_file') ? credentials.token : null);
+  const claims = decodeJwtClaims(candidate);
+  const scopes = claims?.scopes || credentials.agent_token_scopes || [];
+  const expiry = claims?.exp ? claims.exp * 1000 : Date.parse(credentials.agent_token_expires_at);
+  if (!deps.forceMint && candidate && Array.isArray(scopes) && scopes.includes(wanted) && Number.isFinite(expiry) && expiry > Date.now()) {
+    return { ok: true, token: candidate, minted: false, credentials };
   }
 
-  const credentials = load() || {};
   if (!firstNonEmptyString(credentials.token, credentials.refresh_token)) {
     return { ok: false, error: NO_STORED_JWT_MESSAGE };
   }
@@ -267,6 +266,7 @@ async function mintAgentToken(args = [], deps = {}) {
     output(JSON.stringify({
       ok: true,
       minted: true,
+      stored_in: minted.storedIn,
       scopes: minted.meta.scopes,
       daily_credit_cap: minted.meta.dailyCreditCap,
       expires_at: minted.meta.expiresAt,
@@ -275,6 +275,7 @@ async function mintAgentToken(args = [], deps = {}) {
   }
 
   printAgentTokenMint(minted.meta, output);
+  output(`stored in ${minted.storedIn}`);
   return 0;
 }
 
@@ -982,6 +983,7 @@ module.exports = {
   shellInit,
   parseAgentTokenArgs,
   mintAgentToken,
+  persistMintedAgentToken,
   ensureBilledCommandAuth,
   wantsAgentToken,
 };
