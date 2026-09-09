@@ -1461,15 +1461,20 @@ function channelVideosUrl(channel) {
   return `${base}/videos`;
 }
 
+function looksLikeFlatVideoId(id) {
+  return /^[A-Za-z0-9_-]+$/.test(String(id || '')) && id !== 'NA';
+}
+
 function parseFlatPlaylist(stdout) {
   const videos = [];
   for (const line of String(stdout || '').split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || !trimmed.includes('|')) continue;
+    if (/^(WARNING|ERROR|INFO)\b/i.test(trimmed)) continue;
     const idx = trimmed.indexOf('|');
     const id = trimmed.slice(0, idx).trim();
     const title = trimmed.slice(idx + 1).trim();
-    if (id && id !== 'NA') videos.push({ id, title });
+    if (looksLikeFlatVideoId(id)) videos.push({ id, title });
   }
   return videos;
 }
@@ -1750,6 +1755,7 @@ function defaultPlaylistExpander(playlistUrl, deps = {}) {
   const result = spawn('yt-dlp', [
     '--no-update',
     '--flat-playlist',
+    '--no-warnings',
     '--print',
     '%(id)s|%(title)s',
     playlistUrl,

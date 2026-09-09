@@ -595,3 +595,28 @@ test('expandNotesTargets leaves a plain watch url untouched', () => {
     { url: 'https://www.youtube.com/watch?v=plain1', id: 'plain1' },
   ]);
 });
+
+test('playlist expand skips warning lines and passes --no-warnings', () => {
+  const spawned = [];
+  const items = expandNotesTargets(['https://www.youtube.com/playlist?list=PLxx'], {
+    spawnSync: (cmd, args) => {
+      spawned.push({ cmd, args });
+      return {
+        status: 1,
+        stdout: [
+          'WARNING: [youtube] Incomplete data | retrying',
+          'real01|Real Video',
+          'ERROR: [youtube] foo | HTTP Error 429',
+        ].join('\n'),
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      };
+    },
+  });
+  assert.equal(spawned.length, 1);
+  assert.equal(spawned[0].cmd, 'yt-dlp');
+  assert.equal(spawned[0].args.includes('--flat-playlist'), true);
+  assert.equal(spawned[0].args.includes('--no-warnings'), true);
+  assert.deepEqual(items, [
+    { url: 'https://www.youtube.com/watch?v=real01', id: 'real01', title: 'Real Video' },
+  ]);
+});
