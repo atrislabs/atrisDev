@@ -399,7 +399,7 @@ test('extractLocalTranscript keeps a written vtt when 429 stdout is empty', asyn
   assert.match(readLocalCaptionText({ url: 'https://youtube.com/watch?v=abc123', workDir }), /Hello world/);
 });
 
-test('extractLocalTranscript keeps a written vtt for shorts embed and live urls when 429 stdout is empty', async () => {
+test('extractLocalTranscript keeps a written vtt for shorts embed live and /e/ urls when 429 stdout is empty', async () => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-local-shorts-'));
   fs.writeFileSync(path.join(workDir, 'yt_abc123.en.vtt'), [
     'WEBVTT',
@@ -412,7 +412,10 @@ test('extractLocalTranscript keeps a written vtt for shorts embed and live urls 
     'https://www.youtube.com/shorts/abc123',
     'https://www.youtube.com/embed/abc123',
     'https://www.youtube.com/live/abc123',
+    'https://www.youtube.com/e/abc123',
     'https://www.youtube-nocookie.com/embed/abc123',
+    'https://www.youtube-nocookie.com/e/abc123',
+    'https://m.youtube.com/e/abc123',
   ];
 
   for (const url of urls) {
@@ -681,6 +684,32 @@ test('youtube notes without --save writes no brief or apply', async () => {
 
 test('youtube notes keeps written notes for a nocookie embed url when the runner exits 429', async () => {
   const url = 'https://www.youtube-nocookie.com/embed/ntrate1';
+  const { cwd, workDir } = notesApplyWorkspace('ntrate1', RICH_NOTES);
+  const output = [];
+
+  const status = await youtubeCommand(['notes', url], {
+    cwd,
+    workDir,
+    now: '2026-08-26',
+    output: (line) => output.push(line),
+    runner: () => ({
+      status: 1,
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+  });
+
+  assert.equal(status, 0);
+  assert.equal(keptPrintedNotes({ url, workDir }), true);
+  assert.equal(output.filter((line) => line === ephemeralApplyMessage('notes')).length, 1);
+  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.doesNotMatch(output.join('\n'), /429|Too Many Requests|FAILED/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs')), false);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+});
+
+test('youtube notes keeps written notes for an /e/ url when the runner exits 429', async () => {
+  const url = 'https://www.youtube.com/e/ntrate1';
   const { cwd, workDir } = notesApplyWorkspace('ntrate1', RICH_NOTES);
   const output = [];
 

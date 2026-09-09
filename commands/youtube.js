@@ -636,7 +636,7 @@ function videoIdFromUrl(url) {
   if (watch) return watch[1];
   const short = text.match(/youtu\.be\/([^?&/]+)/);
   if (short) return short[1];
-  const pathId = text.match(/\/(?:shorts|embed|live|v)\/([^?&/]+)/i);
+  const pathId = text.match(/\/(?:shorts|embed|live|v|e)\/([^?&/]+)/i);
   return pathId ? pathId[1] : null;
 }
 
