@@ -11,6 +11,10 @@ const { spawn, spawnSync } = require('node:child_process');
 const { ensureBilledCommandAuth } = require('../commands/auth');
 const { xSearchApplyRel } = require('../commands/x-search');
 
+const jwt = (claims) => `e30.${Buffer.from(JSON.stringify(claims)).toString('base64url')}.signature`;
+const agentExp = Math.floor(Date.now() / 1000) + 3600;
+const youtubeAgent = jwt({ type: 'agent_access', scopes: ['youtube'], exp: agentExp });
+
 const repoRoot = path.resolve(__dirname, '..');
 const cliPath = path.join(repoRoot, 'bin', 'atris.js');
 const SECRET = 'minted-billed-agent-token-secret';
@@ -470,6 +474,92 @@ test('atris youtube process mints a youtube token from the stored JWT and retrie
     assert.equal(stored.token, 'stored-user-jwt');
     assert.equal(stored.agent_token, SECRET);
     assert.equal(stored.refresh_token, 'stored-refresh-jwt');
+  } finally {
+    await closeServer(mock.server);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('atris youtube process uses a login-field scoped token and does not remint', async () => {
+  const dir = makeTempDir();
+  const home = path.join(dir, 'home');
+  writeCredentials(home, { token: youtubeAgent, provider: 'atris' });
+
+  const applyDir = path.join(dir, 'atris', 'wiki', 'briefs');
+  fs.mkdirSync(applyDir, { recursive: true });
+  fs.writeFileSync(path.join(applyDir, 'youtube-abc123.apply.md'), [
+    'source: https://youtu.be/abc123',
+    'change: commands/youtube.js',
+    'receipt: node --test test/billed-command-auth.test.js',
+    '',
+  ].join('\n'));
+
+  const mock = await startHttpMock((request) => {
+    if (request.url === '/api/auth/agent-token') {
+      return { status: 500, body: { error: 'scoped login must not remint' } };
+    }
+    if (request.url === '/api/agent/process_youtube') {
+      assert.equal(request.authorization, `Bearer ${youtubeAgent}`);
+      return {
+        status: 200,
+        body: {
+          status: 'success',
+          message: 'ok',
+          video_analysis: 'scoped login youtube worked',
+          credits_used: 5,
+          credits_remaining: 40,
+        },
+      };
+    }
+    return { status: 404, body: { error: `unexpected ${request.url}` } };
+  });
+
+  try {
+    const res = await runCliAsync(['youtube', 'process', 'https://youtu.be/abc123'], {
+      cwd: dir,
+      env: {
+        HOME: home,
+        ATRIS_API_URL: `http://127.0.0.1:${mock.port}/api`,
+      },
+    });
+    assert.equal(res.status, 0, `${res.stdout}\n${res.stderr}`);
+    assert.equal(mock.requests.some((req) => req.url === '/api/auth/agent-token'), false);
+    const processCall = mock.requests.find((req) => req.url === '/api/agent/process_youtube');
+    assert.ok(processCall, 'expected youtube process');
+    assert.equal(processCall.authorization, `Bearer ${youtubeAgent}`);
+    assert.match(res.stdout, /scoped login youtube worked/);
+    assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, /Refusing to save a scoped agent token/);
+    assert.equal(readCredentials(home).token, youtubeAgent);
+    assert.equal(readCredentials(home).agent_token, undefined);
+  } finally {
+    await closeServer(mock.server);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('atris x-search with a youtube-only scoped login token stays off remint and the paid pull', async () => {
+  const dir = makeTempDir();
+  const home = path.join(dir, 'home');
+  writeCredentials(home, { token: youtubeAgent, provider: 'atris' });
+
+  const mock = await startHttpMock((request) => {
+    return { status: 500, body: { error: `unexpected ${request.url}` } };
+  });
+
+  try {
+    const res = await runCliAsync(['x-search', 'MCP agents'], {
+      cwd: dir,
+      env: {
+        HOME: home,
+        ATRIS_API_URL: `http://127.0.0.1:${mock.port}/api`,
+      },
+    });
+    assert.equal(res.status, 1, `${res.stdout}\n${res.stderr}`);
+    const text = `${res.stdout}\n${res.stderr}`;
+    assert.match(text, /not signed in\. run atris login first\./);
+    assert.doesNotMatch(text, /Refusing to save a scoped agent token/);
+    assert.equal(mock.requests.length, 0);
+    assert.equal(readCredentials(home).token, youtubeAgent);
   } finally {
     await closeServer(mock.server);
     fs.rmSync(dir, { recursive: true, force: true });

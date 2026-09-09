@@ -30,6 +30,17 @@ test('saveCredentials rejects agent_access before changing any login file', t =>
   assert.equal(fs.readFileSync(file, 'utf8'), before);
 });
 
+test('persistMintedAgentToken refuses a scoped login token without writing', t => {
+  const { file } = sandbox(t);
+  fs.writeFileSync(file, JSON.stringify({ token: agent }));
+  const before = fs.readFileSync(file, 'utf8');
+  assert.throws(
+    () => persistMintedAgentToken({ token: agent }, jwt({ type: 'agent_access', scopes: ['x-search'], exp })),
+    /Refusing to save a scoped agent token as the login token/,
+  );
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+});
+
 test('persistMintedAgentToken preserves session and stores scoped metadata', t => {
   const { read } = sandbox(t);
   auth.saveCredentials('session', 'refresh', 'owner@example.com', 'owner', 'google');
@@ -92,6 +103,44 @@ for (const state of ['valid', 'expired', 'wrong-scope', 'missing']) {
     assert.equal(result.token, state === 'valid' ? token : 'new-agent');
   });
 }
+
+test('billed auth uses a login-field scoped token when the scope matches', async () => {
+  let minted = 0;
+  const result = await ensureBilledCommandAuth('youtube', {
+    loadCredentials: () => ({ token: agent }),
+    mintScopedAgentToken: async () => {
+      minted += 1;
+      return { ok: true, token: 'new-agent' };
+    },
+    apiRequestJson: async () => {
+      throw new Error('scoped login must not remint');
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.minted, false);
+  assert.equal(result.token, agent);
+  assert.equal(minted, 0);
+});
+
+test('billed auth does not remint from a login-field scoped token for another scope', async () => {
+  let minted = 0;
+  const result = await ensureBilledCommandAuth('x-search', {
+    loadCredentials: () => ({ token: agent }),
+    persistMintedAgentToken: () => {
+      throw new Error('should not persist');
+    },
+    mintScopedAgentToken: async () => {
+      minted += 1;
+      return { ok: true, token: 'new-agent' };
+    },
+    apiRequestJson: async () => {
+      throw new Error('scoped login must not remint');
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'not signed in. run atris login first.');
+  assert.equal(minted, 0);
+});
 
 test('authenticated loader repairs before validating the restored session', async t => {
   const { file, read } = sandbox(t);
