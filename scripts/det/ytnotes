@@ -21,6 +21,7 @@ mkdir -p "$WORK"
 cd "$WORK"
 
 # Printed metadata and a written English VTT are a hit even when yt-dlp exits 429.
+# A leaked WARNING|ERROR print line is not the video id.
 # Manual English is --write-subs. Auto English is often en-orig / en-US / en-GB.
 # Teach reads the same list on disk. Empty --print still keeps a VTT written
 # in this run (id from the watch / shorts / embed / live / e / nocookie embed URL
@@ -38,8 +39,29 @@ META=$(yt-dlp --no-update --quiet --no-warnings --skip-download \
   -o "yt_%(id)s" \
   --print "%(id)s|%(title)s|%(channel)s|%(duration_string)s" \
   "$URL" 2>/dev/null) || true
-ID="${META%%|*}"
-INFO="${META#*|}"
+# Skip WARNING/ERROR/INFO print leaks. Keep the last id|title line so
+# notes stay on yt_<id>.md and keep can find them after a later error.
+ID=""
+INFO=""
+while IFS= read -r line || [ -n "$line" ]; do
+  trimmed="${line#"${line%%[![:space:]]*}"}"
+  case "$trimmed" in
+    WARNING*|ERROR*|INFO*|warning*|error*|info*) continue ;;
+  esac
+  case "$trimmed" in
+    *'|'*)
+      cand="${trimmed%%|*}"
+      case "$cand" in
+        ''|NA) continue ;;
+        *[!A-Za-z0-9_-]*) continue ;;
+      esac
+      ID="$cand"
+      INFO="${trimmed#*|}"
+      ;;
+  esac
+done <<EOF
+$META
+EOF
 if [ -z "$ID" ]; then
   case "$URL" in
     *'?v='*|*'&v='*)
