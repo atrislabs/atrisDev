@@ -272,7 +272,8 @@ test('rich multi-url notes --save proves failing learner baseline for the first 
   assert.doesNotMatch(log.text(), /next: atris youtube teach/);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'notes-aaa111')), true);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'notes-bbb222')), true);
-  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-aaa111.apply.md')), true);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-aaa111.apply.md')), true);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-aaa111.apply.md')), false);
 });
 
 test('rich notes --save batch --json stays quiet on the learner score', async () => {
@@ -303,7 +304,7 @@ test('rich notes --save batch --json stays quiet on the learner score', async ()
 test('rich notes --save batch returns nonzero when the first apply already passes', async () => {
   const first = 'https://www.youtube.com/watch?v=pass01';
   const { cwd, workDir } = richNotesWorkspace(['pass01', 'pass02']);
-  const applyRel = path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-pass01.apply.md');
+  const applyRel = path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-pass01.apply.md');
   fs.mkdirSync(path.dirname(applyRel), { recursive: true });
   fs.writeFileSync(applyRel, [
     'source: https://www.youtube.com/watch?v=pass01',

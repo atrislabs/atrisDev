@@ -78,7 +78,7 @@ function runExperimentsKeep(cwd, slug) {
 
 function assertNotesApplyClaimable(cwd, { id, tokens = [], date = '2026-08-26' } = {}) {
   const packRel = `atris/experiments/${notesExperimentSlug(id)}`;
-  const applyRel = `atris/wiki/briefs/youtube-${id}.apply.md`;
+  const applyRel = `atris/wiki/briefs/notes-${id}.apply.md`;
   const sidecar = fs.readFileSync(path.join(cwd, applyRel), 'utf8');
   assert.match(sidecar, new RegExp(escapeRe(packRel)));
   assert.match(sidecar, /keep only if measure\.py moves 0→1/);
@@ -122,6 +122,7 @@ test('youtube notes --save refuses a thin brief and writes no atris files', asyn
   assert.equal(out.lines.filter((line) => line === `next: atris youtube teach "${THIN_URL}"`).length, 1);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-thin01.md')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-thin01.apply.md')), false);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-thin01.apply.md')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'logs')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
 });
@@ -372,7 +373,7 @@ test('experiments keep refuses a minted notes pack at 0 and keeps after check to
 
   assert.equal(status, 0);
   const packDir = path.join(cwd, 'atris', 'experiments', 'notes-notes01');
-  const applyPath = path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-notes01.apply.md');
+  const applyPath = path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-notes01.apply.md');
 
   const refused = runExperimentsKeep(cwd, 'notes-notes01');
   assert.equal(refused.status, 1, refused.stderr || refused.stdout);

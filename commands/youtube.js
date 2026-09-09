@@ -765,6 +765,10 @@ function applySidecarRel(id) {
   return applyGate.applySidecarRel('youtube', id);
 }
 
+function notesApplyRel(id) {
+  return applyGate.applySidecarRel('notes', experimentIdToken(id));
+}
+
 function notesExperimentSlug(id) {
   return `notes-${experimentIdToken(id)}`;
 }
@@ -814,7 +818,7 @@ function saveRichNotes(url, deps = {}) {
     url,
     lesson,
     slug: id ? notesExperimentSlug(id) : null,
-    applyRel: id ? applySidecarRel(id) : null,
+    applyRel: id ? notesApplyRel(id) : null,
   });
   return { thin: false, brief, packRel, lesson };
 }
@@ -826,7 +830,7 @@ function ensureNotesApply({ cwd, url, packRel, now, output } = {}) {
   return applyGate.ensureApply({
     cwd,
     source: url,
-    rel: id ? applySidecarRel(id) : null,
+    rel: id ? notesApplyRel(id) : null,
     now,
     output,
     incompleteMessage: slug
@@ -907,6 +911,7 @@ function unsaveYoutubeNotes(target, deps = {}) {
   };
   add(briefRel);
   add(applyRel);
+  add(notesApplyRel(id));
   for (const section of sections) {
     add(teachBriefRel(id, section));
     add(applySidecarRel(`${id}-s${section}`));
@@ -1938,7 +1943,7 @@ function runYoutubeNotesBatch({ urls, engine, save, json } = {}, deps = {}) {
     }));
     const baseline = proveSavedLearnerBaseline({
       cwd: deps.cwd || process.cwd(),
-      applyRel: id ? applySidecarRel(id) : null,
+      applyRel: id ? notesApplyRel(id) : null,
       lesson,
       output,
       json: asJson,
@@ -1989,7 +1994,7 @@ function runSingleYoutubeNotes(url, engine, deps = {}) {
   const id = videoIdFromUrl(url);
   const baseline = proveSavedLearnerBaseline({
     cwd,
-    applyRel: id ? applySidecarRel(id) : null,
+    applyRel: id ? notesApplyRel(id) : null,
     lesson: saved.lesson,
     output,
     json: deps.json === true,
