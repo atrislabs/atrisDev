@@ -1499,14 +1499,15 @@ test('youtube process mints only the youtube scope after an expired user wall an
   assert.doesNotMatch(output.join('\n'), /\/auth\/cli|Choose login method|Opening browser/);
 });
 
-test('youtube process remints after a billed 401 and retries once', async () => {
+async function runProcessRemint(firstData, retryData, extraArgs = []) {
   const calls = [];
+  const output = [];
   const secret = 'minted-youtube-after-401';
-  const url = 'https://youtube.com/watch?v=abc123';
-  const cwd = filledApplyWorkspace('abc123', url);
-  const status = await youtubeCommand([url], {
+  const url = 'https://youtube.com/watch?v=procremint';
+  const cwd = filledApplyWorkspace('procremint', url);
+  const status = await youtubeCommand(['process', url, ...extraArgs], {
     cwd,
-    output: () => {},
+    output: (line) => output.push(line),
     ensureValidCredentials: async () => ({ credentials: { token: 'user-jwt' } }),
     loadCredentials: () => ({ token: 'user-jwt', refresh_token: 'refresh-jwt' }),
     persistMintedAgentToken: () => {},
@@ -1514,7 +1515,12 @@ test('youtube process remints after a billed 401 and retries once', async () => 
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, token: options.token, body: options.body });
       if (pathname === '/agent/process_youtube' && options.token === 'user-jwt') {
-        return { ok: false, status: 401, error: 'agent token required' };
+        return {
+          ok: false,
+          status: 401,
+          error: 'agent token required',
+          data: firstData,
+        };
       }
       if (pathname === '/auth/agent-token') {
         assert.deepEqual(options.body.scopes, ['youtube']);
@@ -1523,10 +1529,18 @@ test('youtube process remints after a billed 401 and retries once', async () => 
       return {
         ok: true,
         status: 200,
-        data: { status: 'success', message: 'ok', video_analysis: 'retried' },
+        data: retryData,
       };
     },
   });
+  return { status, text: output.join('\n'), calls, secret };
+}
+
+test('youtube process remints after a billed 401 and retries once', async () => {
+  const { status, calls, secret } = await runProcessRemint(
+    undefined,
+    { status: 'success', message: 'ok', video_analysis: 'retried' },
+  );
 
   assert.equal(status, 0);
   assert.equal(calls[0].pathname, '/agent/process_youtube');
@@ -1534,6 +1548,82 @@ test('youtube process remints after a billed 401 and retries once', async () => 
   assert.equal(calls[1].pathname, '/auth/agent-token');
   assert.equal(calls[2].pathname, '/agent/process_youtube');
   assert.equal(calls[2].token, secret);
+});
+
+test('401 remint process with unused credits retries and does not claim a refund', async () => {
+  const { status, text, calls } = await runProcessRemint(
+    {
+      error: 'agent token required',
+      credits_used: 0,
+      credits_remaining: 50,
+    },
+    {
+      status: 'success',
+      message: 'YouTube video processed successfully',
+      video_analysis: 'welcome back friends this is just a chat',
+      credits_used: 5,
+      credits_remaining: 45,
+    },
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].pathname, '/agent/process_youtube');
+  assert.equal(calls[1].pathname, '/auth/agent-token');
+  assert.equal(calls[2].pathname, '/agent/process_youtube');
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.match(text, /Credits: 5 used, 45 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.equal(calls.some((call) => /refund/i.test(call.pathname)), false);
+});
+
+test('401 remint process with refunded credits surfaces them before retry', async () => {
+  const { status, text, calls } = await runProcessRemint(
+    {
+      error: 'agent token required',
+      credits_used: 0,
+      credits_remaining: 50,
+      credits_refunded: 5,
+    },
+    {
+      status: 'success',
+      message: 'YouTube video processed successfully',
+      video_analysis: 'welcome back friends this is just a chat',
+      credits_used: 5,
+      credits_remaining: 45,
+    },
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].pathname, '/agent/process_youtube');
+  assert.equal(calls[1].pathname, '/auth/agent-token');
+  assert.equal(calls[2].pathname, '/agent/process_youtube');
+  assert.match(text, /credits refunded/);
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.match(text, /Credits: 5 used, 45 remaining/);
+  assert.equal(calls.some((call) => /refund/i.test(call.pathname)), false);
+});
+
+test('401 remint process --json stays quiet on first-call credits', async () => {
+  const { status, text, calls } = await runProcessRemint(
+    {
+      error: 'agent token required',
+      credits_used: 0,
+      credits_remaining: 50,
+      credits_refunded: 5,
+    },
+    {
+      status: 'success',
+      video_analysis: 'welcome back friends this is just a chat',
+      credits_used: 5,
+    },
+    ['--json'],
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 3);
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.video_analysis, 'welcome back friends this is just a chat');
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /^Credits:/m);
 });
 
 async function runProcessFailure(result) {
