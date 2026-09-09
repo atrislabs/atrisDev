@@ -2373,6 +2373,12 @@ async function requestPaidYoutubeSearch(options, deps = {}) {
   if (!result.ok && result.status === 401 && !auth.minted) {
     const remint = await ensureBilled('youtube', { ...deps, forceMint: true });
     if (remint?.ok && remint.token) {
+      if (!options.json) {
+        const print = typeof deps.output === 'function' ? deps.output : () => {};
+        for (const line of formatCreditsLines(paidSearchCredits(result.data))) {
+          print(line);
+        }
+      }
       auth = remint;
       result = await call(auth.token);
     }

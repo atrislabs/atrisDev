@@ -267,7 +267,7 @@ Two layers, never mixed. The reply the person reads is flowing prose: ideas, spe
 ## Billing
 
 - **Search: 0 credits** (local discovery)
-- **Paid search: 5 credits** (`--paid`; print credits refunded only when the server marks a refund)
+- **Paid search: 5 credits** (`--paid`; print credits refunded only when the server marks a refund. A 401 that remints and retries prints those same credit lines from the first payload before the retry. `--json` stays quiet.)
 - **Notes: 0 credits** (local captions + engine)
 - **Process: 5 credits per video** (flat rate, any length)
 - Credits deducted before processing
