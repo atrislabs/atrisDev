@@ -1296,7 +1296,7 @@ test('youtube search --paid empty results prints credits and exits 2', async () 
   assert.equal(status, 2);
   assert.match(output.join('\n'), /no videos found/);
   assert.match(output.join('\n'), /Credits: 0 used, 1000 remaining/);
-  assert.match(output.join('\n'), /credits refunded/);
+  assert.doesNotMatch(output.join('\n'), /credits refunded/);
   assert.equal(output.includes(WATCH_TICK_NEXT), true);
   assert.equal(output.filter((line) => String(line).startsWith('next:')).length, 1);
   assert.doesNotMatch(output.join('\n'), /next: atris youtube teach/);
@@ -1372,6 +1372,34 @@ test('502 paid youtube search with refunded credits surfaces them and does not i
   assert.match(text, /credits refunded/);
   assert.match(text, /Credits: 0 used, 1000 remaining/);
   assert.doesNotMatch(text, /next: atris youtube watch tick/);
+});
+
+test('502 paid youtube search with unused credits does not claim a refund', async () => {
+  const output = [];
+  const status = await youtubeCommand(['search', '--paid', 'agents'], {
+    ...cacheDeps(),
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    apiRequestJson: async () => ({
+      ok: false,
+      status: 502,
+      error: 'Search failed',
+      data: {
+        error: 'Search failed',
+        credits_used: 0,
+        credits_remaining: 1000,
+      },
+    }),
+  });
+  assert.equal(status, 1);
+  const text = output.join('\n');
+  assert.match(text, /502/);
+  assert.match(text, /unavailable|retry/i);
+  assert.match(text, /Credits: 0 used, 1000 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /next: atris youtube watch tick/);
+  assert.doesNotMatch(text, /^check:/m);
+  assert.doesNotMatch(text, /score: 0/);
 });
 
 test('youtube search --paid surfaces 401 login hint', async () => {
