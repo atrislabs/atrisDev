@@ -2289,19 +2289,27 @@ function paidSearchCredits(data) {
   return { used, remaining, refunded };
 }
 
-function creditsWereRefunded(credits) {
+function creditsRefundedExplicitly(credits) {
   if (!credits) return false;
-  if (credits.used === 0) return true;
   if (credits.refunded === true) return true;
   return typeof credits.refunded === 'number' && credits.refunded > 0;
 }
 
-function formatCreditsLines(credits) {
+function creditsWereRefunded(credits) {
+  if (!credits) return false;
+  if (credits.used === 0) return true;
+  return creditsRefundedExplicitly(credits);
+}
+
+function formatCreditsLines(credits, { inferZeroUsedRefund = true } = {}) {
   const lines = [];
   if (credits.used !== undefined || credits.remaining !== undefined) {
     lines.push(`Credits: ${credits.used !== undefined ? credits.used : '?'} used, ${credits.remaining !== undefined ? credits.remaining : '?'} remaining`);
   }
-  if (creditsWereRefunded(credits)) {
+  const refunded = inferZeroUsedRefund
+    ? creditsWereRefunded(credits)
+    : creditsRefundedExplicitly(credits);
+  if (refunded) {
     lines.push('credits refunded');
   }
   return lines;
@@ -2328,11 +2336,12 @@ function youtubeSearchFailureError(result) {
         ? ' YouTube search is unavailable; retry in a few seconds.'
         : '';
   const credits = paidSearchCredits(result.data);
+  const inferZeroUsedRefund = result.status !== 401 && result.status !== 402;
   const refundHint = result.status === 502 && creditsWereRefunded(credits)
     ? ' credits refunded.'
     : '';
   const lines = [`YouTube search failed (${result.status}): ${resultErrorText(result)}.${hint}${refundHint}`];
-  lines.push(...formatCreditsLines(credits));
+  lines.push(...formatCreditsLines(credits, { inferZeroUsedRefund }));
   return new Error(lines.join('\n'));
 }
 

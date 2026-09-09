@@ -1411,6 +1411,82 @@ test('youtube search --paid surfaces 402 credits hint', async () => {
   assert.doesNotMatch(output.join('\n'), /next: atris youtube watch tick/);
 });
 
+test('402 paid youtube search with unused credits does not claim a refund', async () => {
+  const output = [];
+  const status = await youtubeCommand(['search', '--paid', 'agents'], {
+    ...cacheDeps(),
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    apiRequestJson: async () => ({
+      ok: false,
+      status: 402,
+      error: 'Insufficient credits',
+      data: {
+        error: 'Insufficient credits',
+        credits_used: 0,
+        credits_remaining: 0,
+      },
+    }),
+  });
+  assert.equal(status, 1);
+  const text = output.join('\n');
+  assert.match(text, /402/);
+  assert.match(text, /Check Atris credits/);
+  assert.match(text, /Credits: 0 used, 0 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /next: atris youtube watch tick/);
+});
+
+test('401 paid youtube search with unused credits does not claim a refund', async () => {
+  const output = [];
+  const status = await youtubeCommand(['search', '--paid', 'agents'], {
+    ...cacheDeps(),
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    loadCredentials: () => ({ token: 't' }),
+    apiRequestJson: async () => ({
+      ok: false,
+      status: 401,
+      error: 'Not authenticated',
+      data: {
+        error: 'Not authenticated',
+        credits_used: 0,
+        credits_remaining: 50,
+      },
+    }),
+  });
+  assert.equal(status, 1);
+  const text = output.join('\n');
+  assert.match(text, /401/);
+  assert.match(text, /atris login --force/);
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+});
+
+test('402 paid youtube search still prints an explicit refund', async () => {
+  const output = [];
+  const status = await youtubeCommand(['search', '--paid', 'agents'], {
+    ...cacheDeps(),
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    apiRequestJson: async () => ({
+      ok: false,
+      status: 402,
+      error: 'Insufficient credits',
+      data: {
+        error: 'Insufficient credits',
+        credits_used: 0,
+        credits_remaining: 5,
+        credits_refunded: 5,
+      },
+    }),
+  });
+  assert.equal(status, 1);
+  const text = output.join('\n');
+  assert.match(text, /Credits: 0 used, 5 remaining/);
+  assert.match(text, /credits refunded/);
+});
+
 test('youtube search --paid mints only the youtube scope after an expired user wall and retries', async () => {
   const calls = [];
   const persisted = [];
