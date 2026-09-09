@@ -211,8 +211,16 @@ function youtubeFailureError(result) {
     ? ' Run "atris login --force".'
     : result.status === 402
       ? ' Check Atris credits.'
-      : '';
-  return new Error(`YouTube processing failed (${result.status}): ${resultErrorText(result)}.${hint}`);
+      : result.status === 502
+        ? ' YouTube processing is unavailable; retry in a few seconds.'
+        : '';
+  const credits = paidSearchCredits(result.data);
+  const refundHint = result.status === 502 && creditsRefundedExplicitly(credits)
+    ? ' credits refunded.'
+    : '';
+  const lines = [`YouTube processing failed (${result.status}): ${resultErrorText(result)}.${hint}${refundHint}`];
+  lines.push(...formatCreditsLines(credits));
+  return new Error(lines.join('\n'));
 }
 
 function captionHostAllowed(urlString) {
