@@ -326,6 +326,10 @@ test('teachExperimentSlug lowercases the video id for validate.py', () => {
 });
 
 test('parseTeachArgs defaults to section 1 and accepts --section and --save', () => {
+  assert.equal(
+    parseTeachArgs(['https://www.youtube-nocookie.com/embed/teach01']).url,
+    'https://www.youtube-nocookie.com/embed/teach01',
+  );
   assert.deepEqual(parseTeachArgs([TEACH_URL]), {
     help: false,
     save: false,

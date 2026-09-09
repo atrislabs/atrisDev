@@ -78,6 +78,17 @@ test('parseNotesArgs keeps the engine as the one non-url trailing word', () => {
     },
   );
   assert.deepEqual(
+    parseNotesArgs(['https://www.youtube-nocookie.com/embed/ntrate1']),
+    {
+      urls: ['https://www.youtube-nocookie.com/embed/ntrate1'],
+      engine: null,
+      help: false,
+      save: false,
+      unsave: false,
+      json: false,
+    },
+  );
+  assert.deepEqual(
     parseNotesArgs(['--unsave', 'ccc123xyz']),
     {
       urls: ['ccc123xyz'],
