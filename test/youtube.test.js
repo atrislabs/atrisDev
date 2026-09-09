@@ -1519,6 +1519,47 @@ test('youtube process still needs a human apply after notes --save', async () =>
   assert.doesNotMatch(notesSidecar, /fill this/i);
 });
 
+test('youtube process still needs a human apply when a leftover notes keep-sidecar sits on the process gate', async () => {
+  const url = 'https://www.youtube.com/watch?v=oldnote1';
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-oldnote-'));
+  const applyDir = path.join(cwd, 'atris', 'wiki', 'briefs');
+  fs.mkdirSync(applyDir, { recursive: true });
+  fs.writeFileSync(path.join(applyDir, 'youtube-oldnote1.apply.md'), [
+    `source: ${url}`,
+    'change: apply atris/experiments/notes-oldnote1',
+    'receipt: keep only if measure.py moves 0→1. scores 1 only when the fixture contains the check tokens.',
+    '',
+  ].join('\n'));
+
+  const output = [];
+  let apiCalls = 0;
+  let authCalls = 0;
+  const status = await youtubeCommand(['process', url], {
+    cwd,
+    now: '2026-08-26',
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => {
+      authCalls += 1;
+      return { credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } };
+    },
+    extractLocalTranscript: async () => null,
+    apiRequestJson: async () => {
+      apiCalls += 1;
+      return stubRichProcess();
+    },
+  });
+
+  assert.equal(status, 2);
+  assert.equal(apiCalls, 0);
+  assert.equal(authCalls, 0);
+  assert.equal(output.includes(PROCESS_APPLY_MESSAGE), true);
+  const stub = fs.readFileSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-oldnote1.apply.md'), 'utf8');
+  assert.match(stub, /^change: fill this$/m);
+  assert.match(stub, /^receipt: fill this$/m);
+  assert.doesNotMatch(stub, /atris\/experiments\/notes-oldnote1/);
+  assert.doesNotMatch(stub, /keep only if measure\.py/);
+});
+
 test('youtube process mints only the youtube scope after an expired user wall and retries', async () => {
   const calls = [];
   const persisted = [];
