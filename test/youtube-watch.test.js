@@ -99,6 +99,8 @@ test('parseFlatPlaylist reads id|title rows and skips junk', () => {
     'aaa|Newest video',
     '',
     'NA|skip',
+    'WARNING: [youtube] Incomplete data | retrying',
+    'ERROR: [youtube] foo | HTTP Error 429',
     'bbb|Older video',
   ].join('\n'));
   assert.deepEqual(videos, [

@@ -1,7 +1,7 @@
 ---
 name: youtube
 description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 use printed rows if any; else the CLI retries once, then cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.18.18
+version: 2.18.19
 tags:
   - youtube
   - research
@@ -34,7 +34,7 @@ search QUERY (free)
     |                 then next: atris youtube teach <same-url>
     |                 --json stays quiet
     |                 --save files brief + pack-named apply when notes have a number or named mechanism; a multi-url --save batch proves the first saved pack the same way single-url --save does; thin --save refuses
-    |                 playlist expand keeps printed yt-dlp rows on 429
+    |                 playlist expand keeps printed yt-dlp rows on 429 and skips warning lines so they do not become fake ids; expander passes --no-warnings like watch fetch
     |                 notes keep a written yt_<id>.md (and ytnotes keeps a written manual or auto en / en-orig / en-US / en-GB VTT) when yt-dlp exits 429 or a later error, or --print is empty
     |                 watch, youtu.be, shorts, embed, live, /e/, and youtube-nocookie embed urls all resolve the same video id for that keep
     |                 a copied #t= timestamp still finds yt_<id>.en.vtt
