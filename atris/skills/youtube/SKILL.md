@@ -1,7 +1,7 @@
 ---
 name: youtube
 description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 use printed rows if any; else the CLI retries once, then cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.18.15
+version: 2.18.16
 tags:
   - youtube
   - research
@@ -128,7 +128,7 @@ atris youtube search --paid "MCP agents 2026"
 atris youtube search --paid "MCP agents" --limit 10
 ```
 
-Requires a stored login, then `atris login --agent`. The CLI mints a youtube-scope agent token from disk the same way as `atris youtube process` and `atris x-search`. Never `/auth/cli`. Never paste tokens. Prints `title | watch permalink` plus credits. A rich hit mints `atris/experiments/search-<query>/`, writes one pack-named Apply, and prints `score: 0` only when that Apply starts failing. A thin hit prints `check: fill this`, then one next teach command. `--json` stays quiet and writes no pack. Empty or failed searches refund.
+Requires a stored login, then `atris login --agent`. The CLI mints a youtube-scope agent token from disk the same way as `atris youtube process` and `atris x-search`. Never `/auth/cli`. Never paste tokens. Prints `title | watch permalink` plus credits. A rich hit mints `atris/experiments/search-<query>/`, writes one pack-named Apply, and prints `score: 0` only when that Apply starts failing. A thin hit prints `check: fill this`, then one next teach command. `--json` stays quiet and writes no pack. Empty or 502 failed searches refund. 401 or 402 with unused credits do not claim a refund unless credits_refunded is explicit.
 
 Line contract:
 
