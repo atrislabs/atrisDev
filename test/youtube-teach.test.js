@@ -1235,6 +1235,36 @@ test('extractTeachSource keeps a written vtt for a shorts url when 429 stdout is
   assert.match(readLocalCaptionText({ url: shortsUrl, workDir }), /80 people/);
 });
 
+test('extractTeachSource keeps a written vtt when 429 json is a playlist', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-playlist-'));
+  fs.writeFileSync(path.join(workDir, 'yt_teach01.en.vtt'), TEACH_VTT);
+  const url = 'https://www.youtube.com/watch?v=teach01&list=PLxyz';
+  const args = [];
+
+  const source = await extractTeachSource(url, {
+    workDir,
+    spawnSync: (...spawnArgs) => {
+      args.push(spawnArgs[1] || []);
+      return {
+        status: 1,
+        stdout: JSON.stringify({
+          id: 'PLxyz',
+          _type: 'playlist',
+          entries: [{ id: 'teach01' }],
+        }),
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      };
+    },
+    fetchCaptionText: async () => null,
+  });
+
+  assert.equal(source.id, 'teach01');
+  assert.equal(source.cues.length, 3);
+  assert.match(source.cues[0].text, /80 people/);
+  assert.match(readLocalCaptionText({ url, id: 'PLxyz', workDir }), /80 people/);
+  assert.ok(args.some((list) => list.includes('--no-playlist')), args);
+});
+
 test('youtube teach keeps the lesson when yt-dlp exits 429 with json', async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-429-'));
   const out = collect();

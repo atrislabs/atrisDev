@@ -428,17 +428,32 @@ function localCaptionNames(id) {
   ];
 }
 
+function captionLookupIds({ url, id } = {}) {
+  const ids = [];
+  const seen = new Set();
+  const add = (value) => {
+    const text = String(value || '').trim();
+    if (!text || seen.has(text)) return;
+    seen.add(text);
+    ids.push(text);
+  };
+  add(id);
+  add(videoIdFromUrl(url));
+  return ids;
+}
+
 function readLocalCaptionText({ url, id, workDir } = {}) {
-  const videoId = id || videoIdFromUrl(url);
-  if (!videoId || !workDir) return '';
-  for (const name of localCaptionNames(videoId)) {
-    const abs = path.join(workDir, name);
-    try {
-      if (!fs.existsSync(abs)) continue;
-      const text = fs.readFileSync(abs, 'utf8');
-      if (String(text).trim()) return text;
-    } catch {
-      // try the next written caption file
+  if (!workDir) return '';
+  for (const videoId of captionLookupIds({ url, id })) {
+    for (const name of localCaptionNames(videoId)) {
+      const abs = path.join(workDir, name);
+      try {
+        if (!fs.existsSync(abs)) continue;
+        const text = fs.readFileSync(abs, 'utf8');
+        if (String(text).trim()) return text;
+      } catch {
+        // try the next written caption file
+      }
     }
   }
   return '';
@@ -463,10 +478,25 @@ async function loadCaptionRaw(info, youtubeUrl, deps = {}) {
   return { raw: local, language: selected?.language || 'en' };
 }
 
+function ytDlpInfoArgs(youtubeUrl) {
+  return ['-J', '--skip-download', '--no-warnings', '--no-playlist', youtubeUrl];
+}
+
+function teachSourceVideoId(info, youtubeUrl) {
+  const fromUrl = videoIdFromUrl(youtubeUrl);
+  const fromInfo = info && info.id;
+  const entries = info && Array.isArray(info.entries) ? info.entries : [];
+  const fromEntry = entries[0] && entries[0].id;
+  if (info && (info._type === 'playlist' || entries.length)) {
+    return fromUrl || fromEntry || fromInfo;
+  }
+  return fromInfo || fromUrl;
+}
+
 async function extractLocalTranscript(youtubeUrl, deps = {}) {
   if (process.env.ATRIS_YOUTUBE_LOCAL_TRANSCRIPT === '0') return null;
   const runner = deps.spawnSync || spawnSync;
-  const result = runner('yt-dlp', ['-J', '--skip-download', '--no-warnings', youtubeUrl], {
+  const result = runner('yt-dlp', ytDlpInfoArgs(youtubeUrl), {
     encoding: 'utf8',
     timeout: 20000,
     maxBuffer: 10 * 1024 * 1024,
@@ -3585,7 +3615,7 @@ async function extractTeachSource(youtubeUrl, deps = {}) {
     return deps.extractTeachSource(youtubeUrl, deps);
   }
   const runner = deps.spawnSync || spawnSync;
-  const result = runner('yt-dlp', ['-J', '--skip-download', '--no-warnings', youtubeUrl], {
+  const result = runner('yt-dlp', ytDlpInfoArgs(youtubeUrl), {
     encoding: 'utf8',
     timeout: 20000,
     maxBuffer: 10 * 1024 * 1024,
@@ -3596,7 +3626,7 @@ async function extractTeachSource(youtubeUrl, deps = {}) {
   if (!cues.length) return null;
 
   return {
-    id: (info && info.id) || videoIdFromUrl(youtubeUrl),
+    id: teachSourceVideoId(info, youtubeUrl),
     title: (info && info.title) || '',
     url: youtubeUrl,
     durationSeconds: Number((info && info.duration) || 0) || undefined,

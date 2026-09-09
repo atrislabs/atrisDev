@@ -432,6 +432,41 @@ test('extractLocalTranscript keeps a written vtt for shorts embed and live urls 
   }
 });
 
+test('extractLocalTranscript keeps a written vtt when 429 json is a playlist', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-local-playlist-'));
+  fs.writeFileSync(path.join(workDir, 'yt_abc123.en.vtt'), [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:02.000',
+    'Hello world',
+    '',
+  ].join('\n'));
+  const url = 'https://www.youtube.com/watch?v=abc123&list=PLxyz';
+  const args = [];
+
+  const result = await extractLocalTranscript(url, {
+    workDir,
+    spawnSync: (...spawnArgs) => {
+      args.push(spawnArgs[1] || []);
+      return {
+        status: 1,
+        stdout: JSON.stringify({
+          id: 'PLxyz',
+          _type: 'playlist',
+          entries: [{ id: 'abc123' }],
+        }),
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      };
+    },
+    fetchCaptionText: async () => null,
+  });
+
+  assert.equal(result && result.transcriptText, '[00:00] Hello world');
+  assert.equal(result.language, 'en');
+  assert.match(readLocalCaptionText({ url, id: 'PLxyz', workDir }), /Hello world/);
+  assert.ok(args.some((list) => list.includes('--no-playlist')), args);
+});
+
 test('extractLocalTranscript keeps a written vtt when caption fetch fails after 429 json', async () => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-local-vtt-'));
   fs.writeFileSync(path.join(workDir, 'yt_abc123.en.vtt'), [
