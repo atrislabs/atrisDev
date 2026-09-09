@@ -369,6 +369,36 @@ test('extractLocalTranscript still fails when 429 stdout is empty', async () => 
   assert.equal(result, null);
 });
 
+test('extractLocalTranscript keeps a written vtt when 429 stdout is empty', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-local-emptyjson-'));
+  fs.writeFileSync(path.join(workDir, 'yt_abc123.en.vtt'), [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:02.000',
+    'Hello world',
+    '',
+    '00:00:01.200 --> 00:00:03.000',
+    'Next idea',
+    '',
+  ].join('\n'));
+
+  const result = await extractLocalTranscript('https://youtube.com/watch?v=abc123', {
+    workDir,
+    spawnSync: () => ({
+      status: 1,
+      stdout: '',
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => {
+      throw new Error('empty json must not fetch a caption url');
+    },
+  });
+
+  assert.equal(result.transcriptText, '[00:00] Hello world\n[00:01] Next idea');
+  assert.equal(result.language, 'en');
+  assert.match(readLocalCaptionText({ url: 'https://youtube.com/watch?v=abc123', workDir }), /Hello world/);
+});
+
 test('extractLocalTranscript keeps a written vtt when caption fetch fails after 429 json', async () => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-local-vtt-'));
   fs.writeFileSync(path.join(workDir, 'yt_abc123.en.vtt'), [

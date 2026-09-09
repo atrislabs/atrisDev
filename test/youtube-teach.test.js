@@ -1188,6 +1188,30 @@ test('extractTeachSource still fails when 429 stdout is empty or broken', async 
   assert.equal(parseYtDlpInfoJson({ status: 1, stdout: '{"id":"teach01"' }), null);
 });
 
+test('extractTeachSource keeps a written vtt when 429 stdout is empty', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-emptyjson-'));
+  fs.writeFileSync(path.join(workDir, 'yt_teach01.en.vtt'), TEACH_VTT);
+
+  const source = await extractTeachSource(TEACH_URL, {
+    workDir,
+    spawnSync: () => ({
+      status: 1,
+      stdout: '',
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => {
+      throw new Error('empty json must not fetch a caption url');
+    },
+  });
+
+  assert.equal(source.id, 'teach01');
+  assert.equal(source.chapters.length, 1);
+  assert.equal(source.chapters[0].title, 'full video');
+  assert.equal(source.cues.length, 3);
+  assert.match(source.cues[0].text, /80 people/);
+  assert.match(readLocalCaptionText({ url: TEACH_URL, workDir }), /80 people/);
+});
+
 test('youtube teach keeps the lesson when yt-dlp exits 429 with json', async () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-429-'));
   const out = collect();
