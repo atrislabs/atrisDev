@@ -797,18 +797,7 @@ function notesWorkDir(deps = {}) {
   return deps.workDir || path.join(process.env.TMPDIR || '/tmp', 'ytnotes');
 }
 
-function notesRunnerDetail(result) {
-  return String(
-    (result && result.stderr) || (result && result.error && result.error.message) || '',
-  ).trim();
-}
-
-function isNotesRateLimited(result) {
-  return LOCAL_SEARCH_RATE_LIMIT_RE.test(notesRunnerDetail(result));
-}
-
-function keptPrintedNotes({ url, workDir, result } = {}) {
-  if (result != null && !isNotesRateLimited(result)) return false;
+function keptPrintedNotes({ url, workDir } = {}) {
   return Boolean(String(readNotesText({ url, workDir }) || '').trim());
 }
 
