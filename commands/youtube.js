@@ -1469,7 +1469,9 @@ function channelVideosUrl(channel) {
 }
 
 function looksLikeFlatVideoId(id) {
-  return /^[A-Za-z0-9_-]+$/.test(String(id || '')) && id !== 'NA';
+  const text = String(id || '');
+  if (/^(NA|None)$/i.test(text)) return false;
+  return /^[A-Za-z0-9_-]+$/.test(text);
 }
 
 function parseFlatPlaylist(stdout) {
@@ -2148,10 +2150,12 @@ function parseSearchStdout(stdout = '') {
   for (const line of String(stdout || '').split(/\r?\n/)) {
     const trimmed = line.trim();
     if (!trimmed || !trimmed.includes('|')) continue;
+    if (/^(WARNING|ERROR|INFO)\b/i.test(trimmed)) continue;
     const parts = trimmed.split(/\s*\|\s*/).map((part) => part.trim());
     if (parts.length < 5) continue;
     const url = parts[parts.length - 1];
     if (!/^https?:\/\/(?:www\.)?(?:youtube\.com\/|youtu\.be\/)/i.test(url)) continue;
+    if (!looksLikeFlatVideoId(videoIdFromUrl(url))) continue;
     const row = {
       title: parts[0] || '',
       channel: parts[1] || '',

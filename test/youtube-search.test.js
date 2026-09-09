@@ -168,6 +168,19 @@ test('parseSearchStdout reads five-field and six-field pipe lines', () => {
   assert.match(formatSearchResults(rows), /20260801 \| https:\/\/youtu\.be\/bbb222/);
 });
 
+test('parseSearchStdout skips warning lines and NA urls', () => {
+  const rows = parseSearchStdout([
+    'WARNING: [youtube] Incomplete data | retrying | NA | NA | https://youtu.be/fake01',
+    'NA | NA | NA | NA | NA | https://youtu.be/NA',
+    'None | None | NA | NA | None | https://youtu.be/None',
+    'ERROR: [youtube] foo | bar | baz | qux | https://youtu.be/err001',
+    'INFO: [youtube] nsig | retrying | NA | NA | https://youtu.be/info01',
+    SAMPLE_LINE,
+  ].join('\n'));
+
+  assert.deepEqual(rows, [SAMPLE_ROW]);
+});
+
 test('youtube search --help prints usage without calling the runner', async () => {
   const output = [];
   let runnerCalls = 0;
@@ -464,6 +477,74 @@ test('youtube search runner failure surfaces stderr', async () => {
   });
   assert.equal(status, 1);
   assert.match(output.join('\n'), /yt-dlp exploded/);
+});
+
+test('youtube search 429 does not keep warning or NA print lines', async () => {
+  const output = [];
+  const sleeps = [];
+  let runnerCalls = 0;
+  const fsMock = mockSearchFs();
+  const status = await youtubeCommand(['search', 'agents'], {
+    ...cacheDeps({ fs: fsMock }),
+    output: (line) => output.push(line),
+    sleep: async (ms) => { sleeps.push(ms); },
+    runner: () => {
+      runnerCalls += 1;
+      return {
+        status: 1,
+        stdout: [
+          'WARNING: [youtube] Incomplete data | retrying | NA | NA | https://youtu.be/fake01',
+          'NA | NA | NA | NA | NA | https://youtu.be/NA',
+        ].join('\n'),
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      };
+    },
+  });
+
+  assert.equal(status, 1);
+  assert.equal(runnerCalls, 2);
+  assert.deepEqual(sleeps, [1000]);
+  const text = output.join('\n');
+  assert.equal(text.trim(), RATE_LIMIT_MESSAGE);
+  assert.doesNotMatch(text, /youtu\.be\/fake01|youtu\.be\/NA/);
+  assert.doesNotMatch(text, /^check:/m);
+  assert.doesNotMatch(text, /score: 0/);
+  assert.equal(output.includes('next: atris youtube teach "https://youtu.be/fake01"'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(fsMock.store, CACHE_PATH), false);
+});
+
+test('youtube search 429 keeps a real row after a leaked warning line', async () => {
+  const output = [];
+  let runnerCalls = 0;
+  const fsMock = mockSearchFs();
+  const now = 1_700_000_000_000;
+  const status = await youtubeCommand(['search', 'MCP agents 2026'], {
+    ...cacheDeps({ fs: fsMock, now: () => now }),
+    output: (line) => output.push(line),
+    sleep: async () => {
+      throw new Error('real printed rows must not retry');
+    },
+    runner: () => {
+      runnerCalls += 1;
+      return {
+        status: 1,
+        stdout: [
+          'WARNING: [youtube] Incomplete data | retrying | NA | NA | https://youtu.be/fake01',
+          SAMPLE_LINE,
+        ].join('\n'),
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      };
+    },
+  });
+
+  assert.equal(status, 0);
+  assert.equal(runnerCalls, 1);
+  const text = output.join('\n');
+  assert.match(text, /https:\/\/youtu\.be\/mcp2026a/);
+  assert.doesNotMatch(text, /youtu\.be\/fake01/);
+  assert.equal(output.includes(TEACH_NEXT_LINE), true);
+  const cached = JSON.parse(fsMock.store[CACHE_PATH]);
+  assert.deepEqual(cached.rows, [SAMPLE_ROW]);
 });
 
 test('youtube search keeps printed rows when yt-dlp exits 429', async () => {
