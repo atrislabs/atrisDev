@@ -1,7 +1,7 @@
 ---
 name: youtube
 description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 use printed rows if any; else the CLI retries once, then cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.18.11
+version: 2.18.12
 tags:
   - youtube
   - research
@@ -38,7 +38,7 @@ search QUERY (free)
     |                 notes keep a written yt_<id>.md (and ytnotes keeps a written manual or auto en / en-orig / en-US / en-GB VTT) when yt-dlp exits 429
     |            or teach URL [--section N] (one chapter: claim numbers, named mechanisms, one check; free unless --save)
     |                 printed yt-dlp metadata is a hit even on 429
-    |                 a written VTT or clean.txt is used when the caption URL fetch fails
+    |                 a written VTT or clean.txt is used when the caption URL fetch fails or `-J` stdout is empty
     |                 a taught section that is not last prints next: recap TEXT or skip
     |                 last section: rich ephemeral apply, failing check, and score 0, then next: atris youtube watch tick; save pack keep stays; no recap next
     |                 next --section refuses until recap/skip
@@ -257,7 +257,7 @@ Two layers, never mixed. The reply the person reads is flowing prose: ideas, spe
 
 `atris youtube search --paid` posts `{query, limit}` to `/youtube/search` with bearer auth. Agent tokens need the youtube scope. This is an opt-in buy, not a 429 fallback.
 
-`atris youtube` process first tries local transcript extraction with `yt-dlp`. It sends timestamped `transcript_text` to `/agent/process_youtube` with `cache_transcript=false`. If local transcript processing fails with a retryable error, it falls back to cloud video processing. Use `--json` to inspect `metadata.processing_method` and `metadata.transcript_source`.
+`atris youtube` process first tries local transcript extraction with `yt-dlp`. It sends timestamped `transcript_text` to `/agent/process_youtube` with `cache_transcript=false`. A written VTT or clean.txt in the notes work dir is a local hit even when `-J` stdout is empty or the caption URL fetch fails, so process does not jump to paid cloud video for that case. If local transcript processing fails with a retryable error, it falls back to cloud video processing. Use `--json` to inspect `metadata.processing_method` and `metadata.transcript_source`.
 
 ---
 
@@ -283,7 +283,7 @@ Two layers, never mixed. The reply the person reads is flowing prose: ideas, spe
 | `502` | Transcript or cloud processing failed | Retry; credits auto-refunded when backend fails |
 | search exit 2 | ytsearch/yt-dlp missing or no results | Install yt-dlp, or put ytsearch on PATH |
 | search 429 | YouTube rate-limited local search | use printed rows if any; else CLI already retried; use cached rows if printed (same rich/thin check as a live hit); if the rate-limit sentence prints, STOP; do not use --paid |
-| teach 429 | YouTube rate-limited local metadata | use printed yt-dlp JSON if it parses; if the caption URL fetch fails, use a written VTT or clean.txt from the notes work dir; empty or broken stdout still fails; do not use process as a fallback |
+| teach 429 | YouTube rate-limited local metadata | use printed yt-dlp JSON if it parses; if the caption URL fetch fails or `-J` stdout is empty or broken, use a written VTT or clean.txt from the notes work dir; no written caption still fails; do not use process as a fallback |
 | notes 429 | YouTube rate-limited local captions | use a written yt_<id>.md if it exists; ytnotes keeps a written manual or auto en / en-orig / en-US / en-GB VTT plus printed metadata; empty 429 still fails; do not use --paid |
 
 ---

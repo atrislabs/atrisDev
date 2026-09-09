@@ -445,7 +445,8 @@ function readLocalCaptionText({ url, id, workDir } = {}) {
 }
 
 async function loadCaptionRaw(info, youtubeUrl, deps = {}) {
-  const selected = chooseCaptionTrack(info);
+  const payload = info && typeof info === 'object' ? info : {};
+  const selected = chooseCaptionTrack(payload);
   let raw = '';
   if (selected?.track?.url) {
     raw = await (deps.fetchCaptionText || fetchCaptionText)(selected.track.url);
@@ -455,7 +456,7 @@ async function loadCaptionRaw(info, youtubeUrl, deps = {}) {
   }
   const local = readLocalCaptionText({
     url: youtubeUrl,
-    id: info && info.id,
+    id: payload.id,
     workDir: deps.workDir,
   });
   if (!String(local || '').trim()) return null;
@@ -471,8 +472,6 @@ async function extractLocalTranscript(youtubeUrl, deps = {}) {
     maxBuffer: 10 * 1024 * 1024,
   });
   const info = parseYtDlpInfoJson(result);
-  if (!info) return null;
-
   const loaded = await loadCaptionRaw(info, youtubeUrl, deps);
   const transcript = parseCaptionText(loaded && loaded.raw);
   if (!transcript) return null;
@@ -480,7 +479,7 @@ async function extractLocalTranscript(youtubeUrl, deps = {}) {
   return {
     transcriptText: transcript.slice(0, LOCAL_TRANSCRIPT_MAX_CHARS),
     language: loaded.language || 'unknown',
-    durationSeconds: Number(info.duration || 0) || undefined,
+    durationSeconds: Number((info && info.duration) || 0) || undefined,
   };
 }
 
@@ -3590,19 +3589,17 @@ async function extractTeachSource(youtubeUrl, deps = {}) {
     maxBuffer: 10 * 1024 * 1024,
   });
   const info = parseYtDlpInfoJson(result);
-  if (!info) return null;
-
   const loaded = await loadCaptionRaw(info, youtubeUrl, deps);
   const cues = parseCaptionCues(loaded && loaded.raw);
   if (!cues.length) return null;
 
   return {
-    id: info.id || videoIdFromUrl(youtubeUrl),
-    title: info.title || '',
+    id: (info && info.id) || videoIdFromUrl(youtubeUrl),
+    title: (info && info.title) || '',
     url: youtubeUrl,
-    durationSeconds: Number(info.duration || 0) || undefined,
+    durationSeconds: Number((info && info.duration) || 0) || undefined,
     language: loaded.language || 'unknown',
-    chapters: normalizeChapters(info.chapters, info.duration),
+    chapters: normalizeChapters(info && info.chapters, info && info.duration),
     cues,
   };
 }
