@@ -21,9 +21,10 @@ mkdir -p "$WORK"
 cd "$WORK"
 
 # Printed metadata and a written English VTT are a hit even when yt-dlp exits 429.
-# Auto English is often en-orig / en-US / en-GB, the same list teach reads on disk.
+# Manual English is --write-subs. Auto English is often en-orig / en-US / en-GB.
+# Teach reads the same list on disk.
 META=$(yt-dlp --no-update --quiet --no-warnings --skip-download \
-  --write-auto-subs --sub-format vtt --sub-langs "en,en-orig,en-US,en-GB" \
+  --write-subs --write-auto-subs --sub-format vtt --sub-langs "en,en-orig,en-US,en-GB" \
   --no-simulate \
   -o "yt_%(id)s" \
   --print "%(id)s|%(title)s|%(channel)s|%(duration_string)s" \
