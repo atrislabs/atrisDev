@@ -1216,6 +1216,29 @@ test('extractTeachSource keeps a written vtt when 429 stdout is empty', async ()
   assert.match(readLocalCaptionText({ url: TEACH_URL, workDir }), /80 people/);
 });
 
+test('extractTeachSource keeps a written vtt for a copied #t= url when 429 stdout is empty', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-hash-t-'));
+  fs.writeFileSync(path.join(workDir, 'yt_teach01.en.vtt'), TEACH_VTT);
+  const hashUrl = 'https://www.youtube.com/watch?v=teach01#t=30';
+
+  const source = await extractTeachSource(hashUrl, {
+    workDir,
+    spawnSync: () => ({
+      status: 1,
+      stdout: '',
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => {
+      throw new Error('empty json must not fetch a caption url');
+    },
+  });
+
+  assert.equal(source.id, 'teach01');
+  assert.equal(source.cues.length, 3);
+  assert.match(source.cues[0].text, /80 people/);
+  assert.match(readLocalCaptionText({ url: hashUrl, workDir }), /80 people/);
+});
+
 test('extractTeachSource keeps a written vtt for an /e/ url when 429 stdout is empty', async () => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-e-'));
   fs.writeFileSync(path.join(workDir, 'yt_teach01.en.vtt'), TEACH_VTT);

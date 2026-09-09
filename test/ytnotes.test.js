@@ -220,6 +220,51 @@ test('ytnotes keeps a written vtt when yt-dlp print is empty', () => {
   assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /No English captions/);
 });
 
+test('ytnotes keeps a leftover vtt for a copied #t= url when print is empty', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-ytnotes-hash-t-'));
+  const bin = path.join(tmp, 'bin');
+  const work = path.join(tmp, 'work');
+  const notesWork = path.join(work, 'ytnotes');
+  fs.mkdirSync(bin);
+  fs.mkdirSync(notesWork, { recursive: true });
+  fs.writeFileSync(path.join(notesWork, 'yt_nthash1.en.vtt'), [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:02.000',
+    'The omakase model has 80 people.',
+    '',
+  ].join('\n'));
+
+  writeExec(path.join(bin, 'yt-dlp'), [
+    '#!/bin/sh',
+    'echo "ERROR: [youtube] HTTP Error 429: Too Many Requests" >&2',
+    'exit 1',
+    '',
+  ].join('\n'));
+
+  writeExec(path.join(bin, 'claude'), [
+    '#!/bin/sh',
+    'printf "%s\\n" "# Omakase Clip" "" "The omakase model has 80 people."',
+    '',
+  ].join('\n'));
+
+  const result = spawnSync(YTNOTES, ['https://www.youtube.com/watch?v=nthash1#t=30'], {
+    encoding: 'utf8',
+    timeout: 20000,
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH || '/usr/bin'}`,
+      TMPDIR: work,
+    },
+  });
+
+  const notesPath = path.join(work, 'ytnotes', 'yt_nthash1.md');
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.existsSync(notesPath), true);
+  assert.match(fs.readFileSync(notesPath, 'utf8'), /omakase model/);
+  assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /No English captions/);
+});
+
 test('ytnotes keeps a leftover vtt for an /e/ url when print is empty', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-ytnotes-e-'));
   const bin = path.join(tmp, 'bin');

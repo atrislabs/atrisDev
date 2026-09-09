@@ -631,7 +631,7 @@ function formatYoutubeResult(data) {
 }
 
 function videoIdFromUrl(url) {
-  const text = String(url || '');
+  const text = String(url || '').split('#')[0];
   const watch = text.match(/[?&]v=([^&]+)/);
   if (watch) return watch[1];
   const short = text.match(/youtu\.be\/([^?&/]+)/);

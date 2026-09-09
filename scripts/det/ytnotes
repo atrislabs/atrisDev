@@ -24,7 +24,8 @@ cd "$WORK"
 # Manual English is --write-subs. Auto English is often en-orig / en-US / en-GB.
 # Teach reads the same list on disk. Empty --print still keeps a VTT written
 # in this run (id from the watch / shorts / embed / live / e / nocookie embed URL
-# or the new filename).
+# or the new filename). A copied #t= timestamp is stripped so leftover
+# yt_<id> files still match.
 existing=""
 for name in yt_*.en.vtt yt_*.en-orig.vtt yt_*.en-US.vtt yt_*.en-GB.vtt; do
   [ -e "$name" ] || continue
@@ -80,6 +81,7 @@ if [ -z "$ID" ]; then
       ID="${ID%%/*}"
       ;;
   esac
+  ID="${ID%%#*}"
 fi
 
 VTT=""
