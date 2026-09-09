@@ -605,7 +605,9 @@ function videoIdFromUrl(url) {
   const watch = text.match(/[?&]v=([^&]+)/);
   if (watch) return watch[1];
   const short = text.match(/youtu\.be\/([^?&/]+)/);
-  return short ? short[1] : null;
+  if (short) return short[1];
+  const pathId = text.match(/\/(?:shorts|embed|live|v)\/([^?&/]+)/i);
+  return pathId ? pathId[1] : null;
 }
 
 function videoIdFromArg(arg) {
