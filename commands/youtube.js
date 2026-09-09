@@ -589,6 +589,12 @@ async function processYoutube(options, deps = {}) {
     if (transcriptResult.status === 401 || transcriptResult.status === 402 || transcriptResult.status === 400) {
       throw youtubeFailureError(transcriptResult);
     }
+    if (!options.json) {
+      const print = typeof deps.output === 'function' ? deps.output : () => {};
+      for (const line of formatCreditsLines(paidSearchCredits(transcriptResult.data))) {
+        print(line);
+      }
+    }
   }
 
   const result = await requestYoutube(buildYoutubePayload(options));

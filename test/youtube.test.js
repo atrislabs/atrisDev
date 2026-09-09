@@ -1657,12 +1657,12 @@ test('402 youtube process still prints an explicit refund', async () => {
   assert.match(text, /credits refunded/);
 });
 
-async function runLocalTranscriptProcessRetry(firstResult, secondResult) {
+async function runLocalTranscriptProcessRetry(firstResult, secondResult, extraArgs = []) {
   const url = 'https://youtube.com/watch?v=procretry';
   const cwd = filledApplyWorkspace('procretry', url);
   const output = [];
   const calls = [];
-  const status = await youtubeCommand(['process', url], {
+  const status = await youtubeCommand(['process', url, ...extraArgs], {
     cwd,
     output: (line) => output.push(line),
     ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
@@ -1748,6 +1748,38 @@ test('502 local-transcript process with refunded credits surfaces them before cl
   assert.match(text, /Credits: 0 used, 1000 remaining/);
   assert.match(text, /Credits: 5 used, 995 remaining/);
   assert.equal(calls.some((call) => /refund/i.test(call.pathname)), false);
+});
+
+test('502 local-transcript process --json stays quiet on first-call credits', async () => {
+  const { status, text, calls } = await runLocalTranscriptProcessRetry(
+    {
+      ok: false,
+      status: 502,
+      error: 'Transcript summarization failed',
+      data: {
+        error: 'Transcript summarization failed',
+        credits_used: 0,
+        credits_remaining: 1000,
+        credits_refunded: 5,
+      },
+    },
+    {
+      ok: true,
+      status: 200,
+      data: {
+        status: 'success',
+        video_analysis: 'cloud done',
+        credits_used: 5,
+      },
+    },
+    ['--json'],
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 2);
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.video_analysis, 'cloud done');
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /^Credits:/m);
 });
 
 test('youtube process with no stored JWT fails in one sentence and stays off the login wall', async () => {
