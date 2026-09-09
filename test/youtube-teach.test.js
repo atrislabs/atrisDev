@@ -1115,6 +1115,42 @@ test('extractTeachSource keeps parseable yt-dlp json when yt-dlp exits 429', asy
   assert.match(source.cues[0].text, /80 people/);
 });
 
+test('extractTeachSource keeps 429 json when a warning line prefixes the dump', async () => {
+  const dump = {
+    id: 'teach01',
+    title: 'DHH on Lex Fridman',
+    duration: 900,
+    chapters: TEACH_CHAPTERS,
+    automatic_captions: {
+      en: [{ ext: 'vtt', url: 'https://www.youtube.com/api/timedtext?v=teach01' }],
+    },
+  };
+  assert.equal(parseYtDlpInfoJson({
+    status: 1,
+    stdout: [
+      'WARNING: [youtube] Incomplete data | retrying',
+      JSON.stringify(dump),
+    ].join('\n'),
+  }).id, 'teach01');
+
+  const source = await extractTeachSource(TEACH_URL, {
+    spawnSync: () => ({
+      status: 1,
+      stdout: [
+        'WARNING: [youtube] Incomplete data | retrying',
+        JSON.stringify(dump),
+      ].join('\n'),
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+    fetchCaptionText: async () => TEACH_VTT,
+  });
+
+  assert.equal(source.id, 'teach01');
+  assert.equal(source.chapters.length, 2);
+  assert.equal(source.cues.length, 3);
+  assert.match(source.cues[0].text, /80 people/);
+});
+
 test('extractTeachSource keeps a written vtt when caption fetch fails after 429 json', async () => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-teach-vtt-'));
   fs.writeFileSync(path.join(workDir, 'yt_teach01.en.vtt'), TEACH_VTT);
