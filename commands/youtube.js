@@ -651,7 +651,7 @@ function videoIdFromArg(arg) {
 function looksLikeYoutubeUrl(arg) {
   const text = String(arg || '').trim();
   if (!text || text.startsWith('-')) return false;
-  return /youtube\.com|youtu\.be/i.test(text);
+  return /youtube\.com|youtu\.be|youtube-nocookie\.com/i.test(text);
 }
 
 function isPlaylistUrl(url) {
