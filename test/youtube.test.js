@@ -399,6 +399,40 @@ test('extractLocalTranscript keeps a written vtt when 429 stdout is empty', asyn
   assert.match(readLocalCaptionText({ url: 'https://youtube.com/watch?v=abc123', workDir }), /Hello world/);
 });
 
+test('extractLocalTranscript keeps a written vtt for copied #t= urls when 429 stdout is empty', async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-local-hash-t-'));
+  fs.writeFileSync(path.join(workDir, 'yt_abc123.en.vtt'), [
+    'WEBVTT',
+    '',
+    '00:00:00.000 --> 00:00:02.000',
+    'Hello world',
+    '',
+  ].join('\n'));
+  const urls = [
+    'https://www.youtube.com/watch?v=abc123#t=30',
+    'https://www.youtube.com/watch?v=abc123#t=1m30s',
+    'https://youtu.be/abc123#t=30',
+    'https://www.youtube.com/shorts/abc123#t=5',
+  ];
+
+  for (const url of urls) {
+    const result = await extractLocalTranscript(url, {
+      workDir,
+      spawnSync: () => ({
+        status: 1,
+        stdout: '',
+        stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+      }),
+      fetchCaptionText: async () => {
+        throw new Error('empty json must not fetch a caption url');
+      },
+    });
+
+    assert.equal(result && result.transcriptText, '[00:00] Hello world', url);
+    assert.match(readLocalCaptionText({ url, workDir }), /Hello world/);
+  }
+});
+
 test('extractLocalTranscript keeps a written vtt for shorts embed live and /e/ urls when 429 stdout is empty', async () => {
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-local-shorts-'));
   fs.writeFileSync(path.join(workDir, 'yt_abc123.en.vtt'), [
@@ -679,6 +713,32 @@ test('youtube notes without --save writes no brief or apply', async () => {
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-nosave1.md')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-nosave1.apply.md')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'logs')), false);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+});
+
+test('youtube notes keeps written notes for a copied #t= url when the runner exits 429', async () => {
+  const url = 'https://www.youtube.com/watch?v=ntrate1#t=30';
+  const { cwd, workDir } = notesApplyWorkspace('ntrate1', RICH_NOTES);
+  const output = [];
+
+  const status = await youtubeCommand(['notes', url], {
+    cwd,
+    workDir,
+    now: '2026-08-26',
+    output: (line) => output.push(line),
+    runner: () => ({
+      status: 1,
+      stderr: 'ERROR: [youtube] HTTP Error 429: Too Many Requests',
+    }),
+  });
+
+  assert.equal(status, 0);
+  assert.equal(keptPrintedNotes({ url, workDir }), true);
+  assert.equal(output.filter((line) => line === ephemeralApplyMessage('notes')).length, 1);
+  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.doesNotMatch(output.join('\n'), /429|Too Many Requests|FAILED/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
 });
 
