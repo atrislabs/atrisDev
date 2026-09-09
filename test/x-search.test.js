@@ -155,7 +155,7 @@ test('xSearchCommand --help prints usage without calling the API', async () => {
   assert.match(output.join('\n'), /matching experiment pack/);
   assert.match(output.join('\n'), /person --name/);
   assert.match(output.join('\n'), /Rich ephemeral prints one apply next-step, then hands off to atris youtube search/);
-  assert.match(output.join('\n'), /Empty or failed search refunds the credits/);
+  assert.match(output.join('\n'), /Empty or failed search prints credits refunded only when the server marks a refund/);
   assert.doesNotMatch(output.join('\n'), /next: atris youtube search " "/);
   assert.doesNotMatch(output.join('\n'), /^check:/m);
   assert.doesNotMatch(output.join('\n'), /score: 0/);
@@ -880,7 +880,7 @@ test('empty x-search surfaces a server-side refund and does not invent a refund 
   assertNoSaveFiles(cwd, 'quiet topic');
 });
 
-test('empty citations payload is a refunded empty search', async () => {
+test('empty citations payload does not claim a refund', async () => {
   const cwd = applyWorkspace('ghost cites');
   const output = [];
   const status = await xSearchCommand(['ghost cites'], {
@@ -898,7 +898,8 @@ test('empty citations payload is a refunded empty search', async () => {
   assert.equal(status, 2);
   const text = output.join('\n');
   assert.match(text, /no results/);
-  assert.match(text, /credits refunded/);
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
   assert.doesNotMatch(text, /next: apply /);
   assert.equal(output.filter((line) => line === 'next: atris youtube search " "').length, 1);
   assert.equal(output.filter((line) => String(line).startsWith('next:')).length, 1);
@@ -963,6 +964,38 @@ test('502 with refunded credits surfaces them and does not invent a refund call'
   assert.match(text, /Credits: 0 used, 1000 remaining/);
   assert.doesNotMatch(text, /next: atris youtube search/);
   assert.equal(output.filter((line) => line === 'next: atris youtube search " "').length, 0);
+  assertNoSaveFiles(cwd, 'agents');
+});
+
+test('502 x-search with unused credits does not claim a refund', async () => {
+  const cwd = applyWorkspace('agents');
+  const output = [];
+  const status = await xSearchCommand(['agents'], {
+    cwd,
+    applyNow: '2026-08-26',
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    apiRequestJson: async () => ({
+      ok: false,
+      status: 502,
+      error: 'Search failed',
+      data: {
+        error: 'Search failed',
+        credits_used: 0,
+        credits_remaining: 1000,
+      },
+    }),
+  });
+
+  assert.equal(status, 1);
+  const text = output.join('\n');
+  assert.match(text, /502/);
+  assert.match(text, /unavailable|retry/i);
+  assert.match(text, /Credits: 0 used, 1000 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /next: atris youtube search/);
+  assert.doesNotMatch(text, /^check:/m);
+  assert.doesNotMatch(text, /score: 0/);
   assertNoSaveFiles(cwd, 'agents');
 });
 

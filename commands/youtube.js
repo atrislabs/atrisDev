@@ -2044,7 +2044,7 @@ function showYoutubeSearchHelp(output = console.log, commandName = 'atris youtub
   output('Requires login. Same auth path as atris youtube process.');
   output('A rich hit writes one apply and a failing keep/revert pack (score 0).');
   output('A thin hit prints check: fill this and one next: atris youtube teach <first-url>.');
-  output('Empty or failed paid search refunds the credits.');
+  output('Empty or failed paid search prints credits refunded only when the server marks a refund.');
   output('');
   output('Options:');
   output(`  --limit <n>         Max results (default: ${DEFAULT_SEARCH_LIMIT})`);
@@ -2295,21 +2295,12 @@ function creditsRefundedExplicitly(credits) {
   return typeof credits.refunded === 'number' && credits.refunded > 0;
 }
 
-function creditsWereRefunded(credits) {
-  if (!credits) return false;
-  if (credits.used === 0) return true;
-  return creditsRefundedExplicitly(credits);
-}
-
-function formatCreditsLines(credits, { inferZeroUsedRefund = true } = {}) {
+function formatCreditsLines(credits) {
   const lines = [];
   if (credits.used !== undefined || credits.remaining !== undefined) {
     lines.push(`Credits: ${credits.used !== undefined ? credits.used : '?'} used, ${credits.remaining !== undefined ? credits.remaining : '?'} remaining`);
   }
-  const refunded = inferZeroUsedRefund
-    ? creditsWereRefunded(credits)
-    : creditsRefundedExplicitly(credits);
-  if (refunded) {
+  if (creditsRefundedExplicitly(credits)) {
     lines.push('credits refunded');
   }
   return lines;
@@ -2336,12 +2327,11 @@ function youtubeSearchFailureError(result) {
         ? ' YouTube search is unavailable; retry in a few seconds.'
         : '';
   const credits = paidSearchCredits(result.data);
-  const inferZeroUsedRefund = result.status !== 401 && result.status !== 402;
-  const refundHint = result.status === 502 && creditsWereRefunded(credits)
+  const refundHint = result.status === 502 && creditsRefundedExplicitly(credits)
     ? ' credits refunded.'
     : '';
   const lines = [`YouTube search failed (${result.status}): ${resultErrorText(result)}.${hint}${refundHint}`];
-  lines.push(...formatCreditsLines(credits, { inferZeroUsedRefund }));
+  lines.push(...formatCreditsLines(credits));
   return new Error(lines.join('\n'));
 }
 

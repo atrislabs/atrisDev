@@ -32,7 +32,7 @@ function showXSearchHelp(output = console.log, commandName = 'atris x-search') {
   output('Prints to stdout. Rich ephemeral prints one apply next-step, then hands off to atris youtube search (no files).');
   output('--save files a brief only when the result is rich.');
   output('unsave deletes the filed brief, apply stub, and matching experiment pack (no paid calls).');
-  output('Empty or failed search refunds the credits.');
+  output('Empty or failed search prints credits refunded only when the server marks a refund.');
   output('');
   output('Options:');
   output('  --limit <n>         Max results hint (search only)');
@@ -327,28 +327,18 @@ function xSearchCredits(data) {
   return { used, remaining, refunded };
 }
 
-function creditsWereRefunded(credits) {
-  if (!credits) return false;
-  if (credits.used === 0) return true;
-  if (credits.refunded === true) return true;
-  return typeof credits.refunded === 'number' && credits.refunded > 0;
-}
-
 function creditsRefundedExplicitly(credits) {
   if (!credits) return false;
   if (credits.refunded === true) return true;
   return typeof credits.refunded === 'number' && credits.refunded > 0;
 }
 
-function formatCreditsLines(credits, { inferZeroUsedRefund = true } = {}) {
+function formatCreditsLines(credits) {
   const lines = [];
   if (credits.used !== undefined || credits.remaining !== undefined) {
     lines.push(`Credits: ${credits.used !== undefined ? credits.used : '?'} used, ${credits.remaining !== undefined ? credits.remaining : '?'} remaining`);
   }
-  const refunded = inferZeroUsedRefund
-    ? creditsWereRefunded(credits)
-    : creditsRefundedExplicitly(credits);
-  if (refunded) {
+  if (creditsRefundedExplicitly(credits)) {
     lines.push('credits refunded');
   }
   return lines;
@@ -363,12 +353,11 @@ function xSearchFailureError(result) {
         ? ' xAI is unavailable; retry in a few seconds.'
         : '';
   const credits = xSearchCredits(result.data);
-  const inferZeroUsedRefund = result.status !== 401 && result.status !== 402;
-  const refundHint = result.status === 502 && creditsWereRefunded(credits)
+  const refundHint = result.status === 502 && creditsRefundedExplicitly(credits)
     ? ' credits refunded.'
     : '';
   const lines = [`X search failed (${result.status}): ${resultErrorText(result)}.${hint}${refundHint}`];
-  lines.push(...formatCreditsLines(credits, { inferZeroUsedRefund }));
+  lines.push(...formatCreditsLines(credits));
   return new Error(lines.join('\n'));
 }
 
