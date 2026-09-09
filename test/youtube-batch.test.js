@@ -504,6 +504,34 @@ test('playlist notes batch keeps printed videos when yt-dlp exits 429', async ()
   assert.doesNotMatch(log.text(), /FAILED|429|Too Many Requests|playlist expand failed/);
 });
 
+test('notes batch keeps written notes when the runner exits with a later error', async () => {
+  const firstUrl = 'https://www.youtube.com/watch?v=ntlater1';
+  const secondUrl = 'https://www.youtube.com/watch?v=ntlater2';
+  const { cwd, workDir } = richNotesWorkspace(['ntlater1', 'ntlater2']);
+  const log = collect();
+  const status = await youtubeCommand(['notes', firstUrl, secondUrl], {
+    cwd,
+    workDir,
+    output: log.output,
+    runner: () => ({
+      status: 1,
+      stderr: 'ERROR: [youtube] HTTP Error 403: Forbidden',
+    }),
+  });
+
+  assert.equal(status, 0);
+  assert.match(log.text(), /ntlater1  \d+s  ok/);
+  assert.match(log.text(), /ntlater2  \d+s  ok/);
+  assert.equal(log.lines.filter((line) => line === ephemeralApplyMessage('notes')).length, 1);
+  assert.equal(log.lines.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.equal(log.lines.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.deepEqual(
+    log.text().split('\n').filter((line) => line.startsWith('next: atris youtube teach')),
+    [`next: atris youtube teach "${firstUrl}"`],
+  );
+  assert.doesNotMatch(log.text(), /FAILED|403|Forbidden/);
+});
+
 test('notes batch keeps written notes when the runner exits 429', async () => {
   const firstUrl = 'https://www.youtube.com/watch?v=ntrate1';
   const secondUrl = 'https://www.youtube.com/watch?v=ntrate2';

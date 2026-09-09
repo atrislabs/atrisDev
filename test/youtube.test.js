@@ -847,6 +847,34 @@ test('youtube notes keeps written notes when the runner exits 429', async () => 
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
 });
 
+test('youtube notes keeps written notes when the runner exits with a later error', async () => {
+  const url = 'https://www.youtube.com/watch?v=ntlater1';
+  const { cwd, workDir } = notesApplyWorkspace('ntlater1', RICH_NOTES);
+  const output = [];
+  const result = {
+    status: 1,
+    stderr: 'ERROR: [youtube] HTTP Error 403: Forbidden',
+  };
+
+  const status = await youtubeCommand(['notes', url], {
+    cwd,
+    workDir,
+    now: '2026-08-26',
+    output: (line) => output.push(line),
+    runner: () => result,
+  });
+
+  assert.equal(status, 0);
+  assert.equal(keptPrintedNotes({ url, workDir, result }), true);
+  assert.equal(output.filter((line) => line === ephemeralApplyMessage('notes')).length, 1);
+  assert.equal(output.filter((line) => line === 'check: what is the omakase model?').length, 1);
+  assert.equal(output.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.equal(output.filter((line) => line === `next: atris youtube teach "${url}"`).length, 1);
+  assert.doesNotMatch(output.join('\n'), /403|Forbidden|FAILED/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs')), false);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+});
+
 test('youtube notes still fails a 429 when no notes file was written', async () => {
   const url = 'https://www.youtube.com/watch?v=empty429';
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-empty429-'));
@@ -922,7 +950,9 @@ test('youtube notes without --save stay ephemeral even when thin', async () => {
 
 test('youtube notes failed runner prints no apply next-step', async () => {
   const url = 'https://www.youtube.com/watch?v=fail01';
-  const { cwd, workDir } = notesApplyWorkspace('fail01', RICH_NOTES);
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-apply-'));
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-yt-notes-'));
+  fs.mkdirSync(path.join(cwd, 'atris', 'wiki'), { recursive: true });
   const output = [];
 
   const status = await youtubeCommand(['notes', url], {
@@ -934,6 +964,7 @@ test('youtube notes failed runner prints no apply next-step', async () => {
   });
 
   assert.equal(status, 1);
+  assert.equal(keptPrintedNotes({ url, workDir }), false);
   assert.equal(output.includes(ephemeralApplyMessage('notes')), false);
   assert.doesNotMatch(output.join('\n'), /next: atris youtube teach/);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-fail01.md')), false);
