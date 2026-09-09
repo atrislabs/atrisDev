@@ -415,7 +415,14 @@ function parseCaptionText(raw) {
 }
 
 function parseYtDlpInfoJson(result) {
-  const raw = String((result && result.stdout) || '').trim();
+  const kept = [];
+  for (const line of String((result && result.stdout) || '').split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (/^(WARNING|ERROR|INFO)\b/i.test(trimmed)) continue;
+    kept.push(trimmed);
+  }
+  const raw = kept.join('\n').trim();
   if (!raw) return null;
   try {
     const info = JSON.parse(raw);
