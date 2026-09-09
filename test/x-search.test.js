@@ -431,29 +431,43 @@ test('xSearchCommand mints only the x-search scope after an expired user wall an
   assert.doesNotMatch(output.join('\n'), /\/auth\/cli|Choose login method|Opening browser/);
 });
 
-test('xSearchCommand remints after a billed 401 and retries once', async () => {
+async function runXSearchRemint(firstData, retryData, extraArgs = []) {
   const calls = [];
+  const output = [];
   const secret = 'minted-after-401-secret';
   const cwd = applyWorkspace('agents', true);
-  const status = await xSearchCommand(['agents'], {
+  const status = await xSearchCommand(['agents', ...extraArgs], {
     cwd,
     applyNow: '2026-08-26',
-    output: () => {},
+    output: (line) => output.push(line),
     ensureValidCredentials: async () => ({ credentials: { token: 'user-jwt' } }),
     loadCredentials: () => ({ token: 'user-jwt', refresh_token: 'refresh-jwt' }),
     persistMintedAgentToken: () => {},
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, token: options.token, body: options.body });
       if (pathname === '/x-search/search' && options.token === 'user-jwt') {
-        return { ok: false, status: 401, error: 'agent token required' };
+        return {
+          ok: false,
+          status: 401,
+          error: 'agent token required',
+          data: firstData,
+        };
       }
       if (pathname === '/auth/agent-token') {
         assert.deepEqual(options.body.scopes, ['x-search']);
         return { ok: true, status: 200, data: { access_token: secret, scopes: ['x-search'] } };
       }
-      return { ok: true, status: 200, data: { data: { content: 'retried', citations: [] } } };
+      return { ok: true, status: 200, data: retryData };
     },
   });
+  return { status, text: output.join('\n'), calls, secret };
+}
+
+test('xSearchCommand remints after a billed 401 and retries once', async () => {
+  const { status, calls, secret } = await runXSearchRemint(
+    undefined,
+    { data: { content: 'retried', citations: [] } },
+  );
 
   assert.equal(status, 0);
   assert.equal(calls[0].pathname, '/x-search/search');
@@ -461,6 +475,77 @@ test('xSearchCommand remints after a billed 401 and retries once', async () => {
   assert.equal(calls[1].pathname, '/auth/agent-token');
   assert.equal(calls[2].pathname, '/x-search/search');
   assert.equal(calls[2].token, secret);
+});
+
+test('401 remint x-search with unused credits retries and does not claim a refund', async () => {
+  const { status, text, calls } = await runXSearchRemint(
+    {
+      error: 'agent token required',
+      credits_used: 0,
+      credits_remaining: 50,
+    },
+    {
+      credits_used: 5,
+      credits_remaining: 45,
+      data: { content: 'retried', citations: [] },
+    },
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].pathname, '/x-search/search');
+  assert.equal(calls[1].pathname, '/auth/agent-token');
+  assert.equal(calls[2].pathname, '/x-search/search');
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.match(text, /Credits: 5 used, 45 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.equal(calls.some((call) => /refund/i.test(call.pathname)), false);
+});
+
+test('401 remint x-search with refunded credits surfaces them before retry', async () => {
+  const { status, text, calls } = await runXSearchRemint(
+    {
+      error: 'agent token required',
+      credits_used: 0,
+      credits_remaining: 50,
+      credits_refunded: 5,
+    },
+    {
+      credits_used: 5,
+      credits_remaining: 45,
+      data: { content: 'retried', citations: [] },
+    },
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].pathname, '/x-search/search');
+  assert.equal(calls[1].pathname, '/auth/agent-token');
+  assert.equal(calls[2].pathname, '/x-search/search');
+  assert.match(text, /credits refunded/);
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.match(text, /Credits: 5 used, 45 remaining/);
+  assert.equal(calls.some((call) => /refund/i.test(call.pathname)), false);
+});
+
+test('401 remint x-search --json stays quiet on first-call credits', async () => {
+  const { status, text, calls } = await runXSearchRemint(
+    {
+      error: 'agent token required',
+      credits_used: 0,
+      credits_remaining: 50,
+      credits_refunded: 5,
+    },
+    {
+      credits_used: 5,
+      data: { content: 'retried', citations: [] },
+    },
+    ['--json'],
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 3);
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.data.content, 'retried');
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /^Credits:/m);
 });
 
 test('xSearchCommand with no stored JWT fails in one sentence and stays off the login wall', async () => {

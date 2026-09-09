@@ -391,6 +391,12 @@ async function runXSearch(options, deps = {}) {
       forceMint: true,
     });
     if (remint?.ok && remint.token) {
+      if (!options.json) {
+        const print = typeof deps.output === 'function' ? deps.output : () => {};
+        for (const line of formatCreditsLines(xSearchCredits(result.data))) {
+          print(line);
+        }
+      }
       auth = remint;
       result = await call(auth.token);
     }
