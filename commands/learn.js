@@ -178,6 +178,33 @@ function commitAddedLearning({ type, key, insight, confidence, source, files } =
   return { entry, baseline };
 }
 
+function reviewLearningType(insight) {
+  return /^(don't|never|avoid|watch out|careful)/i.test(String(insight || '')) ? 'pitfall' : 'pattern';
+}
+
+function reviewLearningKey(insight) {
+  return String(insight || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).slice(0, 4).join('-');
+}
+
+function commitReviewLearning(insight, deps = {}) {
+  const print = typeof deps.output === 'function' ? deps.output : (line = '') => console.log(line);
+  const cwd = deps.cwd || process.cwd();
+  const text = String(insight || '').trim();
+  if (!text) return { entry: null, baseline: 0 };
+  const type = reviewLearningType(text);
+  const key = reviewLearningKey(text);
+  const entry = addLearning({ type, key, insight: text, confidence: 7, source: 'review', files: [] });
+  print(`✓ Saved to learnings: [7/10] ${entry.type}/${entry.key}`);
+  const baseline = mintRichLearn({
+    cwd,
+    key: entry.key,
+    insight: entry.insight,
+    now: deps.now,
+    output: print,
+  });
+  return { entry, baseline };
+}
+
 function interactiveAdd(deps = {}) {
   const rl = readline.createInterface({
     input: process.stdin,
@@ -572,6 +599,8 @@ learnAtris.saveRichLearn = saveRichLearn;
 learnAtris.ensureLearnApply = ensureLearnApply;
 learnAtris.mintRichLearn = mintRichLearn;
 learnAtris.commitAddedLearning = commitAddedLearning;
+learnAtris.commitReviewLearning = commitReviewLearning;
+learnAtris.reviewLearningKey = reviewLearningKey;
 learnAtris.harvestFromJournals = harvestFromJournals;
 learnAtris.logDirect = logDirect;
 
