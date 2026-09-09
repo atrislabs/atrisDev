@@ -20,6 +20,8 @@ const {
   saveRichLearn,
   mintRichLearn,
   commitAddedLearning,
+  commitReviewLearning,
+  reviewLearningKey,
   harvestFromJournals,
   logDirect,
 } = learnAtris;
@@ -472,4 +474,70 @@ test('rich learn harvest through the live cli mints the pack', () => {
   });
   assert.equal(stub.status, 0, stub.stderr || stub.stdout);
   assert.equal(JSON.parse(stub.stdout.trim().split('\n').pop()).score, 0);
+});
+
+test('rich review learning mints a failing apply and prints score 0', () => {
+  assert.ok(pythonCmd, 'python3 is required to score the minted pack');
+  const cwd = learnWorkspace();
+  const origCwd = process.cwd();
+  const out = collect();
+  let saved;
+  process.chdir(cwd);
+  try {
+    saved = commitReviewLearning(RICH_INSIGHT, {
+      cwd,
+      now: '2026-09-08',
+      output: out.output,
+    });
+  } finally {
+    process.chdir(origCwd);
+  }
+
+  const key = reviewLearningKey(RICH_INSIGHT);
+  assert.equal(saved.baseline, 0);
+  assert.equal(saved.entry.key, key);
+  assert.equal(saved.entry.source, 'review');
+  assert.equal(out.lines.filter((line) => line === LEARNER_SCORE_ZERO).length, 1);
+  assert.match(out.text(), new RegExp(`next: atris experiments keep learn-${key}`));
+  assert.doesNotMatch(out.text(), /check: fill this/);
+  assert.doesNotMatch(out.text(), /what is the omakase model/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', `learn-${key}`, 'measure.py')), true);
+  assertLearnApplyClaimable(cwd, {
+    key,
+    tokens: ['omakase model', 'what is the omakase model?'],
+  });
+  const measured = spawnSync(pythonCmd, [path.join(cwd, 'atris', 'experiments', `learn-${key}`, 'measure.py')], {
+    cwd: path.join(cwd, 'atris', 'experiments', `learn-${key}`),
+    encoding: 'utf8',
+    env: { ...process.env, ATRIS_REPO_ROOT: cwd },
+  });
+  assert.equal(measured.status, 0, measured.stderr || measured.stdout);
+  assert.equal(JSON.parse(measured.stdout.trim().split('\n').pop()).score, 0);
+});
+
+test('thin review learning prints check fill this and does not invent a question', () => {
+  const cwd = learnWorkspace();
+  const origCwd = process.cwd();
+  const out = collect();
+  let saved;
+  process.chdir(cwd);
+  try {
+    saved = commitReviewLearning(THIN_INSIGHT, {
+      cwd,
+      now: '2026-09-08',
+      output: out.output,
+    });
+  } finally {
+    process.chdir(origCwd);
+  }
+
+  assert.equal(saved.baseline, 0);
+  assert.match(out.text(), /saved to learnings/i);
+  assert.match(out.text(), /check: fill this/);
+  assert.doesNotMatch(out.text(), /what is /);
+  assert.doesNotMatch(out.text(), /score: 0/);
+  assert.doesNotMatch(out.text(), /next: atris experiments keep/);
+  assert.doesNotMatch(out.text(), /next: /);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, learnApplyRel(reviewLearningKey(THIN_INSIGHT)))), false);
 });

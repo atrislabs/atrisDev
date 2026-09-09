@@ -19,6 +19,7 @@ const { startFirstTalk } = require('../lib/context-gatherer');
 const { isNonInteractive } = require('../lib/noninteractive');
 const { loadContext } = require('../lib/state-detection');
 const { buildToolResultBody } = require('../lib/tool-result-encode');
+const { commitReviewLearning } = require('./learn');
 
 function wrapWorkflowText(text, width = 76) {
   const normalized = String(text || '').replace(/\s+/g, ' ').trim();
@@ -1786,15 +1787,10 @@ async function reviewAtris() {
           console.log(`✓ Logged to journal: ${learning}`);
         }
 
-        // Also log to structured learnings (if learnings module exists)
         try {
-          const { addLearning } = require('../lib/learnings');
-          const insight = answer.trim();
-          // Auto-classify: starts with "don't" or "never" or "avoid" → pitfall, else pattern
-          const type = /^(don't|never|avoid|watch out|careful)/i.test(insight) ? 'pitfall' : 'pattern';
-          const key = insight.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).slice(0, 4).join('-');
-          addLearning({ type, key, insight, confidence: 7, source: 'review', files: [] });
-          console.log(`✓ Saved to learnings: [7/10] ${type}/${key}`);
+          commitReviewLearning(answer.trim(), {
+            cwd: process.cwd(),
+          });
         } catch {
           // learnings module not available, so skip silently
         }
