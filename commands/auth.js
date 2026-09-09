@@ -85,7 +85,33 @@ function extractAgentTokenMeta(data, requested, token) {
   return { scopes, dailyCreditCap, expiresAt };
 }
 
+function isAgentAccessToken(token) {
+  return decodeJwtClaims(token)?.type === 'agent_access';
+}
+
+function scopedTokenCandidate(credentials = {}) {
+  if (credentials.agent_token) return credentials.agent_token;
+  if (
+    credentials.source === 'env'
+    || credentials.source === 'agent_token_file'
+    || isAgentAccessToken(credentials.token)
+  ) {
+    return firstNonEmptyString(credentials.token);
+  }
+  return null;
+}
+
+function canMintFromLogin(credentials = {}) {
+  const login = firstNonEmptyString(credentials.token);
+  const refresh = firstNonEmptyString(credentials.refresh_token);
+  if (isAgentAccessToken(login) && !refresh) return false;
+  return Boolean(login || refresh);
+}
+
 function persistMintedAgentToken(credentials, token, extras = {}) {
+  if (isAgentAccessToken(credentials.token)) {
+    throw new Error('Refusing to save a scoped agent token as the login token; keep it under agent_token');
+  }
   const next = {
     ...credentials,
     refresh_token: extras.refresh_token || credentials.refresh_token || null,
@@ -141,7 +167,7 @@ async function mintScopedAgentToken(requested = {}, deps = {}) {
   const credentials = await load(api) || {};
   const accessToken = firstNonEmptyString(credentials.token);
   const refreshToken = firstNonEmptyString(credentials.refresh_token);
-  if (!accessToken && !refreshToken) {
+  if (!canMintFromLogin(credentials)) {
     return { ok: false, code: 'not_logged_in', error: NO_STORED_JWT_MESSAGE };
   }
 
@@ -149,7 +175,7 @@ async function mintScopedAgentToken(requested = {}, deps = {}) {
     scopes,
     daily_credit_cap: dailyCreditCap,
   };
-  let authToken = accessToken || refreshToken;
+  let authToken = isAgentAccessToken(accessToken) ? refreshToken : (accessToken || refreshToken);
   let result = await postAgentToken(api, authToken, body);
   if (!result.ok && result.status === 401 && refreshToken && authToken !== refreshToken) {
     authToken = refreshToken;
@@ -199,7 +225,7 @@ async function ensureBilledCommandAuth(scope, deps = {}) {
   const ensured = !deps.forceMint && deps.ensureValidCredentials
     ? await deps.ensureValidCredentials(api) : null;
   const credentials = ensured?.credentials || await load(api) || {};
-  const candidate = credentials.agent_token || ((credentials.source === 'env' || credentials.source === 'agent_token_file') ? credentials.token : null);
+  const candidate = scopedTokenCandidate(credentials);
   const claims = decodeJwtClaims(candidate);
   const scopes = claims?.scopes || credentials.agent_token_scopes || [];
   const expiry = claims?.exp ? claims.exp * 1000 : Date.parse(credentials.agent_token_expires_at);
@@ -207,7 +233,7 @@ async function ensureBilledCommandAuth(scope, deps = {}) {
     return { ok: true, token: candidate, minted: false, credentials };
   }
 
-  if (!firstNonEmptyString(credentials.token, credentials.refresh_token)) {
+  if (!canMintFromLogin(credentials)) {
     return { ok: false, error: NO_STORED_JWT_MESSAGE };
   }
 

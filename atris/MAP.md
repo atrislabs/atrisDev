@@ -6,7 +6,7 @@
 
 ## Quick Reference Index
 
-- Login token isolation: `utils/auth.js:355` refuses scoped tokens in the login field; `loadCredentials(apiRequestJson)` repairs legacy files through refresh for authenticated callers while synchronous local reads stay offline. `commands/auth.js:88` stores minted keys in `agent_token` with scope/expiry metadata, and billed commands reuse only valid scoped keys. Regression: `test/auth-login-storage.test.js`, `test/auth-agent-token.test.js`, `test/billed-command-auth.test.js`.
+- Login token isolation: `utils/auth.js:355` refuses scoped tokens in the login field; `loadCredentials(apiRequestJson)` repairs legacy files through refresh for authenticated callers while synchronous local reads stay offline. `commands/auth.js:88` `isAgentAccessToken` / `scopedTokenCandidate` / `canMintFromLogin` treat a leftover login-field `agent_access` key as a billed candidate when the scope matches, and refuse remint when there is no real session JWT. `persistMintedAgentToken` will not write a scoped key back into `token`. Regression: `test/auth-login-storage.test.js`, `test/auth-agent-token.test.js`, `test/billed-command-auth.test.js`.
 
 - Member alive dispatcher lookup: `lib/member-alive.js:64` prefers workspace scripts, then the packaged `scripts/member-operate.mjs`; `test/member-alive.test.js` verifies installed dispatch, workspace cwd, and override precedence.
 - Member alive execution results: `scripts/member-operate.mjs:38` reads multiline JSON and preserves explicit failures despite zero process exit. Explicit `--shared-checkout` passes through `commands/member.js` and `lib/member-alive.js`; developer isolation remains the default. Regression: `test/member-alive.test.js`.
