@@ -1,6 +1,6 @@
 {
   "name": "atris",
-  "version": "3.58.5",
+  "version": "3.58.6",
   "description": "you say what you want in plain words. atris builds it, checks it, and shows you proof.",
   "main": "bin/atris.js",
   "bin": {
