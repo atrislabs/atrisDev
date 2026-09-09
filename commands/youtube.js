@@ -964,6 +964,7 @@ function ensureProcessApply({ cwd, url, now, output } = {}) {
     output,
     incompleteMessage: PROCESS_APPLY_MESSAGE,
     required: true,
+    human: true,
   });
 }
 
