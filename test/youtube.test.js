@@ -1536,6 +1536,127 @@ test('youtube process remints after a billed 401 and retries once', async () => 
   assert.equal(calls[2].token, secret);
 });
 
+async function runProcessFailure(result) {
+  const url = 'https://youtube.com/watch?v=procfail';
+  const cwd = filledApplyWorkspace('procfail', url);
+  const output = [];
+  const calls = [];
+  const status = await youtubeCommand(['process', url], {
+    cwd,
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    extractLocalTranscript: async () => null,
+    apiRequestJson: async (pathname, options) => {
+      calls.push({ pathname, options });
+      return result;
+    },
+  });
+  return { status, text: output.join('\n'), calls };
+}
+
+test('401 youtube process with unused credits does not claim a refund', async () => {
+  const { status, text, calls } = await runProcessFailure({
+    ok: false,
+    status: 401,
+    error: 'Not authenticated',
+    data: {
+      error: 'Not authenticated',
+      credits_used: 0,
+      credits_remaining: 50,
+    },
+  });
+  assert.equal(status, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].pathname, '/agent/process_youtube');
+  assert.match(text, /401/);
+  assert.match(text, /atris login --force/);
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /^check:/m);
+  assert.doesNotMatch(text, /score: 0/);
+});
+
+test('402 youtube process with unused credits does not claim a refund', async () => {
+  const { status, text, calls } = await runProcessFailure({
+    ok: false,
+    status: 402,
+    error: 'Insufficient credits',
+    data: {
+      error: 'Insufficient credits',
+      credits_used: 0,
+      credits_remaining: 0,
+    },
+  });
+  assert.equal(status, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].pathname, '/agent/process_youtube');
+  assert.match(text, /402/);
+  assert.match(text, /Check Atris credits/);
+  assert.match(text, /Credits: 0 used, 0 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+});
+
+test('502 youtube process with unused credits does not claim a refund', async () => {
+  const { status, text, calls } = await runProcessFailure({
+    ok: false,
+    status: 502,
+    error: 'Processing failed',
+    data: {
+      error: 'Processing failed',
+      credits_used: 0,
+      credits_remaining: 1000,
+    },
+  });
+  assert.equal(status, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].pathname, '/agent/process_youtube');
+  assert.match(text, /502/);
+  assert.match(text, /unavailable|retry/i);
+  assert.match(text, /Credits: 0 used, 1000 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /^check:/m);
+  assert.doesNotMatch(text, /score: 0/);
+});
+
+test('502 youtube process with refunded credits surfaces them and does not invent a refund call', async () => {
+  const { status, text, calls } = await runProcessFailure({
+    ok: false,
+    status: 502,
+    error: 'Processing failed',
+    data: {
+      error: 'Processing failed',
+      credits_used: 0,
+      credits_remaining: 1000,
+      credits_refunded: 5,
+    },
+  });
+  assert.equal(status, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].pathname, '/agent/process_youtube');
+  assert.match(text, /502/);
+  assert.match(text, /credits refunded/);
+  assert.match(text, /Credits: 0 used, 1000 remaining/);
+});
+
+test('402 youtube process still prints an explicit refund', async () => {
+  const { status, text, calls } = await runProcessFailure({
+    ok: false,
+    status: 402,
+    error: 'Insufficient credits',
+    data: {
+      error: 'Insufficient credits',
+      credits_used: 0,
+      credits_remaining: 5,
+      credits_refunded: 5,
+    },
+  });
+  assert.equal(status, 1);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].pathname, '/agent/process_youtube');
+  assert.match(text, /Credits: 0 used, 5 remaining/);
+  assert.match(text, /credits refunded/);
+});
+
 test('youtube process with no stored JWT fails in one sentence and stays off the login wall', async () => {
   const output = [];
   let apiCalls = 0;
