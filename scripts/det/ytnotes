@@ -23,7 +23,7 @@ cd "$WORK"
 # Printed metadata and a written English VTT are a hit even when yt-dlp exits 429.
 # Manual English is --write-subs. Auto English is often en-orig / en-US / en-GB.
 # Teach reads the same list on disk. Empty --print still keeps a VTT written
-# in this run (id from the watch / shorts / embed / live / nocookie embed URL
+# in this run (id from the watch / shorts / embed / live / e / nocookie embed URL
 # or the new filename).
 existing=""
 for name in yt_*.en.vtt yt_*.en-orig.vtt yt_*.en-US.vtt yt_*.en-GB.vtt; do
@@ -63,6 +63,12 @@ if [ -z "$ID" ]; then
       ;;
     *'/embed/'*)
       ID="${URL#*'/embed/'}"
+      ID="${ID%%\?*}"
+      ID="${ID%%&*}"
+      ID="${ID%%/*}"
+      ;;
+    *'/e/'*)
+      ID="${URL#*'/e/'}"
       ID="${ID%%\?*}"
       ID="${ID%%&*}"
       ID="${ID%%/*}"
