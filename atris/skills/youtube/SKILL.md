@@ -1,7 +1,7 @@
 ---
 name: youtube
 description: "YouTube discovery and learning. Get watch permalinks with atris youtube search QUERY (free, local ytsearch/yt-dlp). On 429 use printed rows if any; else the CLI retries once, then cached rows if printed, else STOP. Never run --paid after a 429. --paid only when the user explicitly asked to buy permalinks (5 credits). After a URL is picked, atris youtube notes URL (free, ephemeral unless --save). atris youtube process only to store knowledge (5 credits). Never paste tokens. Never /auth/cli. Mint with atris login --agent from a stored login. Never summarize a video from model memory. Triggers on: youtube search, find videos, paid youtube search, any youtube.com or youtu.be link, youtube, video, watch this, notes on this."
-version: 2.18.12
+version: 2.18.13
 tags:
   - youtube
   - research
@@ -35,7 +35,7 @@ search QUERY (free)
     |                 --json stays quiet
     |                 --save files brief + pack-named apply when notes have a number or named mechanism; a multi-url --save batch proves the first saved pack the same way single-url --save does; thin --save refuses
     |                 playlist expand keeps printed yt-dlp rows on 429
-    |                 notes keep a written yt_<id>.md (and ytnotes keeps a written manual or auto en / en-orig / en-US / en-GB VTT) when yt-dlp exits 429
+    |                 notes keep a written yt_<id>.md (and ytnotes keeps a written manual or auto en / en-orig / en-US / en-GB VTT) when yt-dlp exits 429 or --print is empty
     |            or teach URL [--section N] (one chapter: claim numbers, named mechanisms, one check; free unless --save)
     |                 printed yt-dlp metadata is a hit even on 429
     |                 a written VTT or clean.txt is used when the caption URL fetch fails or `-J` stdout is empty
@@ -284,7 +284,7 @@ Two layers, never mixed. The reply the person reads is flowing prose: ideas, spe
 | search exit 2 | ytsearch/yt-dlp missing or no results | Install yt-dlp, or put ytsearch on PATH |
 | search 429 | YouTube rate-limited local search | use printed rows if any; else CLI already retried; use cached rows if printed (same rich/thin check as a live hit); if the rate-limit sentence prints, STOP; do not use --paid |
 | teach 429 | YouTube rate-limited local metadata | use printed yt-dlp JSON if it parses; if the caption URL fetch fails or `-J` stdout is empty or broken, use a written VTT or clean.txt from the notes work dir; no written caption still fails; do not use process as a fallback |
-| notes 429 | YouTube rate-limited local captions | use a written yt_<id>.md if it exists; ytnotes keeps a written manual or auto en / en-orig / en-US / en-GB VTT plus printed metadata; empty 429 still fails; do not use --paid |
+| notes 429 | YouTube rate-limited local captions | use a written yt_<id>.md if it exists; ytnotes keeps a written manual or auto en / en-orig / en-US / en-GB VTT plus printed metadata, or a VTT written in the same run when print is empty; empty 429 with no captions still fails; do not use --paid |
 
 ---
 

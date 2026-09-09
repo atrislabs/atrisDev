@@ -22,7 +22,14 @@ cd "$WORK"
 
 # Printed metadata and a written English VTT are a hit even when yt-dlp exits 429.
 # Manual English is --write-subs. Auto English is often en-orig / en-US / en-GB.
-# Teach reads the same list on disk.
+# Teach reads the same list on disk. Empty --print still keeps a VTT written
+# in this run (id from the watch URL or the new filename).
+existing=""
+for name in yt_*.en.vtt yt_*.en-orig.vtt yt_*.en-US.vtt yt_*.en-GB.vtt; do
+  [ -e "$name" ] || continue
+  existing="$existing $name"
+done
+
 META=$(yt-dlp --no-update --quiet --no-warnings --skip-download \
   --write-subs --write-auto-subs --sub-format vtt --sub-langs "en,en-orig,en-US,en-GB" \
   --no-simulate \
@@ -31,14 +38,48 @@ META=$(yt-dlp --no-update --quiet --no-warnings --skip-download \
   "$URL" 2>/dev/null) || true
 ID="${META%%|*}"
 INFO="${META#*|}"
+if [ -z "$ID" ]; then
+  case "$URL" in
+    *'?v='*|*'&v='*)
+      ID="${URL#*'?v='}"
+      if [ "$ID" = "$URL" ]; then
+        ID="${URL#*'&v='}"
+      fi
+      ID="${ID%%&*}"
+      ID="${ID%%\?*}"
+      ;;
+    *'youtu.be/'*)
+      ID="${URL#*'youtu.be/'}"
+      ID="${ID%%\?*}"
+      ID="${ID%%&*}"
+      ID="${ID%%/*}"
+      ;;
+  esac
+fi
 
 VTT=""
-for name in "yt_${ID}.en.vtt" "yt_${ID}.en-orig.vtt" "yt_${ID}.en-US.vtt" "yt_${ID}.en-GB.vtt"; do
-  if [ -s "$name" ]; then
+if [ -n "$ID" ]; then
+  for name in "yt_${ID}.en.vtt" "yt_${ID}.en-orig.vtt" "yt_${ID}.en-US.vtt" "yt_${ID}.en-GB.vtt"; do
+    if [ -s "$name" ]; then
+      VTT="$name"
+      break
+    fi
+  done
+fi
+if [ -z "$VTT" ]; then
+  for name in yt_*.en.vtt yt_*.en-orig.vtt yt_*.en-US.vtt yt_*.en-GB.vtt; do
+    [ -s "$name" ] || continue
+    case " $existing " in
+      *" $name "*) continue ;;
+    esac
     VTT="$name"
+    if [ -z "$ID" ]; then
+      ID="${name#yt_}"
+      ID="${ID%%.*}"
+    fi
     break
-  fi
-done
+  done
+fi
 if [ -z "$VTT" ]; then
   echo "No English captions found for $URL. Falling back is manual (atris youtube process, 5 credits)." >&2
   exit 2
