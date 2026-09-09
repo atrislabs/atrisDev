@@ -631,11 +631,8 @@ function formatYoutubeResult(data) {
       : '';
     lines.push(`Processing: ${method}${source}`);
   }
-  if (data?.credits_used !== undefined || data?.credits_remaining !== undefined) {
-    const used = data.credits_used !== undefined ? data.credits_used : '?';
-    const remaining = data.credits_remaining !== undefined ? data.credits_remaining : '?';
-    lines.push(`Credits: ${used} used, ${remaining} remaining`);
-  }
+  const creditLines = formatCreditsLines(paidSearchCredits(data));
+  if (creditLines.length) lines.push(...creditLines);
   const analysis = processAnalysisText(data);
   if (analysis) {
     lines.push('');

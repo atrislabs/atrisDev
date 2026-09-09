@@ -271,7 +271,7 @@ Two layers, never mixed. The reply the person reads is flowing prose: ideas, spe
 - **Notes: 0 credits** (local captions + engine)
 - **Process: 5 credits per video** (flat rate, any length)
 - Credits deducted before processing
-- Process 401/402/502 print Credits when present and say credits refunded only when `credits_refunded` is explicit. A local-transcript 502 that then retries cloud prints the same lines from the first payload.
+- Process 200/401/402/502 print Credits when present and say credits refunded only when `credits_refunded` is explicit. A local-transcript 502 that then retries cloud prints the same lines from the first payload. Unused `credits_used: 0` on a 200 is not a refund.
 - Insufficient credits returns 402 with your current balance
 
 ---

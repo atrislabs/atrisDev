@@ -2022,4 +2022,95 @@ test('formatYoutubeResult includes metadata, credits, and analysis', () => {
   assert.match(text, /Processing: client_transcript_atris_fast via client_transcript/);
   assert.match(text, /Credits: 5 used, 10 remaining/);
   assert.match(text, /Analysis text/);
+  assert.doesNotMatch(text, /credits refunded/);
+});
+
+test('formatYoutubeResult does not call unused success credits a refund', () => {
+  const text = formatYoutubeResult({
+    message: 'done',
+    video_analysis: 'thin chat about feelings',
+    credits_used: 0,
+    credits_remaining: 50,
+  });
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+});
+
+test('formatYoutubeResult prints an explicit success refund', () => {
+  const text = formatYoutubeResult({
+    message: 'done',
+    video_analysis: 'thin chat about feelings',
+    credits_used: 0,
+    credits_remaining: 50,
+    credits_refunded: 5,
+  });
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.match(text, /credits refunded/);
+});
+
+async function runProcessSuccess(id, data, extraArgs = []) {
+  const url = `https://youtube.com/watch?v=${id}`;
+  const cwd = filledApplyWorkspace(id, url);
+  const output = [];
+  const calls = [];
+  const status = await youtubeCommand(['process', url, ...extraArgs], {
+    cwd,
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    extractLocalTranscript: async () => null,
+    apiRequestJson: async (pathname, options) => {
+      calls.push({ pathname, options });
+      return { ok: true, status: 200, data };
+    },
+  });
+  return { status, text: output.join('\n'), calls };
+}
+
+test('200 youtube process with unused credits does not claim a refund', async () => {
+  const { status, text, calls } = await runProcessSuccess('procok0', {
+    status: 'success',
+    message: 'YouTube video processed successfully',
+    video_analysis: 'welcome back friends this is just a chat',
+    credits_used: 0,
+    credits_remaining: 50,
+  });
+  assert.equal(status, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].pathname, '/agent/process_youtube');
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.equal(calls.some((call) => /refund/i.test(call.pathname)), false);
+});
+
+test('200 youtube process with refunded credits surfaces them and does not invent a refund call', async () => {
+  const { status, text, calls } = await runProcessSuccess('procok5', {
+    status: 'success',
+    message: 'YouTube video processed successfully',
+    video_analysis: 'welcome back friends this is just a chat',
+    credits_used: 0,
+    credits_remaining: 50,
+    credits_refunded: 5,
+  });
+  assert.equal(status, 0);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].pathname, '/agent/process_youtube');
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.match(text, /credits refunded/);
+  assert.equal(calls.some((call) => /refund/i.test(call.pathname)), false);
+});
+
+test('200 youtube process --json stays quiet on credits refunded', async () => {
+  const { status, text, calls } = await runProcessSuccess('procokj', {
+    status: 'success',
+    video_analysis: 'welcome back friends this is just a chat',
+    credits_used: 0,
+    credits_remaining: 50,
+    credits_refunded: 5,
+  }, ['--json']);
+  assert.equal(status, 0);
+  assert.equal(calls.length, 1);
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.credits_refunded, 5);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /^Credits:/m);
 });
