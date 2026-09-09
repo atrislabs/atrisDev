@@ -222,8 +222,32 @@ test('thin learn log through the live cli stays jsonl only', () => {
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /map-first/);
+  assert.match(result.stdout, /check: fill this/);
+  assert.doesNotMatch(result.stdout + result.stderr, /what is /);
   assert.doesNotMatch(result.stdout + result.stderr, /score: 0/);
   assert.doesNotMatch(result.stdout + result.stderr, /next: atris experiments keep/);
+  assert.doesNotMatch(result.stdout + result.stderr, /next: atris youtube/);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
+  assert.equal(fs.existsSync(path.join(cwd, learnApplyRel('map-first'))), false);
+});
+
+test('thin learn mint prints check fill this and does not invent a question', () => {
+  const cwd = learnWorkspace();
+  const out = collect();
+  const status = mintRichLearn({
+    cwd,
+    key: 'map-first',
+    insight: THIN_INSIGHT,
+    now: '2026-09-08',
+    output: out.output,
+  });
+
+  assert.equal(status, 0);
+  assert.match(out.text(), /check: fill this/);
+  assert.equal(out.lines.filter((line) => line === 'check: fill this').length, 1);
+  assert.doesNotMatch(out.text(), /what is /);
+  assert.doesNotMatch(out.text(), /score: 0/);
+  assert.doesNotMatch(out.text(), /next: /);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
   assert.equal(fs.existsSync(path.join(cwd, learnApplyRel('map-first'))), false);
 });
@@ -330,7 +354,7 @@ test('rich learn add mints a failing apply and prints score 0', () => {
   assert.equal(JSON.parse(stub.stdout.trim().split('\n').pop()).score, 0);
 });
 
-test('thin learn add stays prose only and does not invent a check', () => {
+test('thin learn add prints check fill this and does not invent a question', () => {
   const cwd = learnWorkspace();
   const origCwd = process.cwd();
   const out = collect();
@@ -355,8 +379,9 @@ test('thin learn add stays prose only and does not invent a check', () => {
 
   assert.equal(saved.baseline, 0);
   assert.match(out.text(), /map-first/);
+  assert.match(out.text(), /check: fill this/);
+  assert.doesNotMatch(out.text(), /what is /);
   assert.doesNotMatch(out.text(), /score: 0/);
-  assert.doesNotMatch(out.text(), /check: fill this/);
   assert.doesNotMatch(out.text(), /next: atris experiments keep/);
   assert.doesNotMatch(out.text(), /next: /);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
@@ -399,7 +424,7 @@ test('rich learn harvest mints a failing apply and prints score 0', () => {
   assert.equal(JSON.parse(stub.stdout.trim().split('\n').pop()).score, 0);
 });
 
-test('thin learn harvest stays prose only and does not invent a check', () => {
+test('thin learn harvest prints check fill this and does not invent a question', () => {
   const cwd = learnWorkspace();
   writeHarvestNotes(cwd, [THIN_INSIGHT]);
   const origCwd = process.cwd();
@@ -416,8 +441,9 @@ test('thin learn harvest stays prose only and does not invent a check', () => {
   }
 
   assert.match(out.text(), /saved/);
+  assert.match(out.text(), /check: fill this/);
+  assert.doesNotMatch(out.text(), /what is /);
   assert.doesNotMatch(out.text(), /score: 0/);
-  assert.doesNotMatch(out.text(), /check: fill this/);
   assert.doesNotMatch(out.text(), /next: atris experiments keep/);
   assert.doesNotMatch(out.text(), /next: /);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
@@ -433,7 +459,8 @@ test('rich learn harvest through the live cli mints the pack', () => {
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /score: 0/);
   assert.match(result.stdout, new RegExp(`next: atris experiments keep learn-${key}`));
-  assert.doesNotMatch(result.stdout + result.stderr, /check: fill this/);
+  assert.match(result.stdout, /check: fill this/);
+  assert.doesNotMatch(result.stdout + result.stderr, /what is the omakase model/);
   const measurePy = path.join(cwd, 'atris', 'experiments', `learn-${key}`, 'measure.py');
   assert.equal(fs.existsSync(measurePy), true);
   assert.equal(fs.existsSync(path.join(cwd, learnApplyRel(key))), true);

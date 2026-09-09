@@ -18,6 +18,7 @@ const {
   extractTeachNumbers,
   extractTeachMechanisms,
   isThinTeachLesson,
+  printLearnerCheckGate,
   proveSavedLearnerBaseline,
 } = require('./youtube');
 
@@ -324,7 +325,10 @@ function ensureLearnApply({ cwd, key, packRel, now, output } = {}) {
 function mintRichLearn({ cwd, key, insight, now, output } = {}) {
   const print = typeof output === 'function' ? output : (line = '') => console.log(line);
   const saved = saveRichLearn({ cwd, key, insight });
-  if (saved.thin) return 0;
+  if (saved.thin) {
+    printLearnerCheckGate(print, saved.lesson, { includeCheck: true });
+    return 0;
+  }
   ensureLearnApply({
     cwd,
     key,
@@ -498,10 +502,10 @@ function showLearnHelp() {
   console.log('');
   console.log('  Commands:');
   console.log('    (none)     Show recent learnings');
-  console.log('    add        Add a learning interactively. A rich insight mints one apply plus a failing measure.py.');
-  console.log('    log <json> Add programmatically (for agents). A rich insight (number or named mechanism) mints one apply plus a failing measure.py.');
+  console.log('    add        Add a learning interactively. A rich insight mints one apply plus a failing measure.py. A thin insight prints check: fill this.');
+  console.log('    log <json> Add programmatically (for agents). A rich insight (number or named mechanism) mints one apply plus a failing measure.py. A thin insight prints check: fill this.');
   console.log('    search <q> Search learnings by keyword');
-  console.log('    harvest    Extract learnings from journal Notes. A rich insight mints one apply plus a failing measure.py.');
+  console.log('    harvest    Extract learnings from journal Notes. A rich insight mints one apply plus a failing measure.py. A thin insight prints check: fill this.');
   console.log('    prune      Check for stale/contradictory entries');
   console.log('    stats      Show learning statistics');
   console.log('    export     Export as markdown');
