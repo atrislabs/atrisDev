@@ -96,6 +96,49 @@ test('ytnotes skips a leaked warning print line when choosing the video id', () 
   assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /No English captions/);
 });
 
+test('ytnotes skips a None print line when choosing the video id', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-ytnotes-none-id-'));
+  const bin = path.join(tmp, 'bin');
+  const work = path.join(tmp, 'work');
+  fs.mkdirSync(bin);
+  fs.mkdirSync(work);
+
+  writeExec(path.join(bin, 'yt-dlp'), [
+    '#!/bin/sh',
+    'printf "%s\\n" "WEBVTT" "" "00:00:00.000 --> 00:00:02.000" "The omakase model has 80 people." > yt_ntnone1.en.vtt',
+    'printf "%s\\n" "ntnone1|Omakase Clip|37signals|0:02"',
+    'printf "%s\\n" "None|not a video id"',
+    'echo "ERROR: [youtube] HTTP Error 429: Too Many Requests" >&2',
+    'exit 1',
+    '',
+  ].join('\n'));
+
+  writeExec(path.join(bin, 'claude'), [
+    '#!/bin/sh',
+    'printf "%s\\n" "# Omakase Clip" "" "The omakase model has 80 people."',
+    '',
+  ].join('\n'));
+
+  const result = spawnSync(YTNOTES, ['https://www.youtube.com/watch?v=ntnone1'], {
+    encoding: 'utf8',
+    timeout: 20000,
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH || '/usr/bin'}`,
+      TMPDIR: work,
+    },
+  });
+
+  const notesDir = path.join(work, 'ytnotes');
+  const notesPath = path.join(notesDir, 'yt_ntnone1.md');
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.existsSync(notesPath), true);
+  assert.match(fs.readFileSync(notesPath, 'utf8'), /omakase model/);
+  const leaked = fs.readdirSync(notesDir).filter((name) => /^yt_None\./.test(name));
+  assert.deepEqual(leaked, []);
+  assert.doesNotMatch(`${result.stdout}\n${result.stderr}`, /No English captions/);
+});
+
 test('ytnotes keeps a written manual English vtt when auto captions are absent', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'atris-ytnotes-manual-'));
   const bin = path.join(tmp, 'bin');

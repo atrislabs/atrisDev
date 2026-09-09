@@ -39,8 +39,9 @@ META=$(yt-dlp --no-update --quiet --no-warnings --skip-download \
   -o "yt_%(id)s" \
   --print "%(id)s|%(title)s|%(channel)s|%(duration_string)s" \
   "$URL" 2>/dev/null) || true
-# Skip WARNING/ERROR/INFO print leaks. Keep the last id|title line so
-# notes stay on yt_<id>.md and keep can find them after a later error.
+# Skip WARNING/ERROR/INFO print leaks and NA/None sentinels. Keep the last
+# id|title line so notes stay on yt_<id>.md and keep can find them after a
+# later error. Same sentinel bar as watch/search looksLikeFlatVideoId.
 ID=""
 INFO=""
 while IFS= read -r line || [ -n "$line" ]; do
@@ -51,8 +52,11 @@ while IFS= read -r line || [ -n "$line" ]; do
   case "$trimmed" in
     *'|'*)
       cand="${trimmed%%|*}"
+      folded=$(printf '%s' "$cand" | tr '[:upper:]' '[:lower:]')
+      case "$folded" in
+        ''|na|none) continue ;;
+      esac
       case "$cand" in
-        ''|NA) continue ;;
         *[!A-Za-z0-9_-]*) continue ;;
       esac
       ID="$cand"
