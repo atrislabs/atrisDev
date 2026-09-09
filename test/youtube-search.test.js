@@ -1567,19 +1567,25 @@ test('youtube search --paid mints only the youtube scope after an expired user w
   assert.doesNotMatch(output.join('\n'), /\/auth\/cli|Choose login method|Opening browser/);
 });
 
-test('youtube search --paid remints after a billed 401 and retries once', async () => {
+async function runPaidSearchRemint(firstData, retryData, extraArgs = []) {
   const calls = [];
+  const output = [];
   const secret = 'minted-after-401-yt-search';
-  const status = await youtubeCommand(['search', '--paid', 'agents'], {
+  const status = await youtubeCommand(['search', '--paid', 'agents', ...extraArgs], {
     ...cacheDeps(),
-    output: () => {},
+    output: (line) => output.push(line),
     ensureValidCredentials: async () => ({ credentials: { token: 'user-jwt' } }),
     loadCredentials: () => ({ token: 'user-jwt', refresh_token: 'refresh-jwt' }),
     persistMintedAgentToken: () => {},
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, token: options.token, body: options.body });
       if (pathname === '/youtube/search' && options.token === 'user-jwt') {
-        return { ok: false, status: 401, error: 'agent token required' };
+        return {
+          ok: false,
+          status: 401,
+          error: 'agent token required',
+          data: firstData,
+        };
       }
       if (pathname === '/auth/agent-token') {
         assert.deepEqual(options.body.scopes, ['youtube']);
@@ -1588,10 +1594,18 @@ test('youtube search --paid remints after a billed 401 and retries once', async 
       return {
         ok: true,
         status: 200,
-        data: { data: { results: [{ title: 'retried', url: 'https://www.youtube.com/watch?v=retry1' }] } },
+        data: retryData,
       };
     },
   });
+  return { status, text: output.join('\n'), calls, secret };
+}
+
+test('youtube search --paid remints after a billed 401 and retries once', async () => {
+  const { status, calls, secret } = await runPaidSearchRemint(
+    undefined,
+    { data: { results: [{ title: 'retried', url: 'https://www.youtube.com/watch?v=retry1' }] } },
+  );
 
   assert.equal(status, 0);
   assert.equal(calls[0].pathname, '/youtube/search');
@@ -1599,6 +1613,77 @@ test('youtube search --paid remints after a billed 401 and retries once', async 
   assert.equal(calls[1].pathname, '/auth/agent-token');
   assert.equal(calls[2].pathname, '/youtube/search');
   assert.equal(calls[2].token, secret);
+});
+
+test('401 remint paid search with unused credits retries and does not claim a refund', async () => {
+  const { status, text, calls } = await runPaidSearchRemint(
+    {
+      error: 'agent token required',
+      credits_used: 0,
+      credits_remaining: 50,
+    },
+    {
+      credits_used: 5,
+      credits_remaining: 45,
+      data: { results: [{ title: 'retried', url: 'https://www.youtube.com/watch?v=retry1' }] },
+    },
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].pathname, '/youtube/search');
+  assert.equal(calls[1].pathname, '/auth/agent-token');
+  assert.equal(calls[2].pathname, '/youtube/search');
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.match(text, /Credits: 5 used, 45 remaining/);
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.equal(calls.some((call) => /refund/i.test(call.pathname)), false);
+});
+
+test('401 remint paid search with refunded credits surfaces them before retry', async () => {
+  const { status, text, calls } = await runPaidSearchRemint(
+    {
+      error: 'agent token required',
+      credits_used: 0,
+      credits_remaining: 50,
+      credits_refunded: 5,
+    },
+    {
+      credits_used: 5,
+      credits_remaining: 45,
+      data: { results: [{ title: 'retried', url: 'https://www.youtube.com/watch?v=retry1' }] },
+    },
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].pathname, '/youtube/search');
+  assert.equal(calls[1].pathname, '/auth/agent-token');
+  assert.equal(calls[2].pathname, '/youtube/search');
+  assert.match(text, /credits refunded/);
+  assert.match(text, /Credits: 0 used, 50 remaining/);
+  assert.match(text, /Credits: 5 used, 45 remaining/);
+  assert.equal(calls.some((call) => /refund/i.test(call.pathname)), false);
+});
+
+test('401 remint paid search --json stays quiet on first-call credits', async () => {
+  const { status, text, calls } = await runPaidSearchRemint(
+    {
+      error: 'agent token required',
+      credits_used: 0,
+      credits_remaining: 50,
+      credits_refunded: 5,
+    },
+    {
+      credits_used: 5,
+      data: { results: [{ title: 'retried', url: 'https://www.youtube.com/watch?v=retry1' }] },
+    },
+    ['--json'],
+  );
+  assert.equal(status, 0);
+  assert.equal(calls.length, 3);
+  const parsed = JSON.parse(text);
+  assert.equal(parsed.data.results[0].title, 'retried');
+  assert.doesNotMatch(text, /credits refunded/);
+  assert.doesNotMatch(text, /^Credits:/m);
 });
 
 test('youtube search --paid with no stored JWT fails in one sentence and stays off the login wall', async () => {
