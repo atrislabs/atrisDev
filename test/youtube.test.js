@@ -1153,7 +1153,8 @@ test('youtube notes --save writes a pack-named apply and a next-line', async () 
   assert.match(output.join('\n'), /next: atris experiments keep notes-apply01/);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-apply01.md')), true);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'notes-apply01', 'measure.py')), true);
-  const stub = fs.readFileSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-apply01.apply.md'), 'utf8');
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-apply01.apply.md')), false);
+  const stub = fs.readFileSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-apply01.apply.md'), 'utf8');
   assert.match(stub, /source: https:\/\/www\.youtube\.com\/watch\?v=apply01/);
   assert.match(stub, /^change: apply atris\/experiments\/notes-apply01$/m);
   assert.match(stub, /^receipt: keep only if measure\.py moves 0→1/m);
@@ -1168,14 +1169,15 @@ test('youtube notes with an apply receipt is complete', async () => {
   const { cwd, workDir } = notesApplyWorkspace('apply02', RICH_NOTES);
   const applyDir = path.join(cwd, 'atris', 'wiki', 'briefs');
   fs.mkdirSync(applyDir, { recursive: true });
-  const applyPath = path.join(applyDir, 'youtube-apply02.apply.md');
+  const processApplyPath = path.join(applyDir, 'youtube-apply02.apply.md');
+  const notesApplyPath = path.join(applyDir, 'notes-apply02.apply.md');
   const filled = [
     `source: ${url}`,
     'change: commands/youtube.js',
     'receipt: node --test test/youtube.test.js',
     '',
   ].join('\n');
-  fs.writeFileSync(applyPath, filled);
+  fs.writeFileSync(processApplyPath, filled);
   const output = [];
 
   const status = await youtubeCommand(['notes', url, '--save'], {
@@ -1188,7 +1190,8 @@ test('youtube notes with an apply receipt is complete', async () => {
 
   assert.equal(status, 0);
   assert.equal(output.includes(APPLY_NEXT_MESSAGE), false);
-  assert.equal(fs.readFileSync(applyPath, 'utf8'), filled);
+  assert.equal(fs.readFileSync(processApplyPath, 'utf8'), filled);
+  assert.match(fs.readFileSync(notesApplyPath, 'utf8'), /^change: apply atris\/experiments\/notes-apply02$/m);
   assert.equal(ensureNotesApply({ cwd, url, now: '2026-08-26', output: () => {} }), 0);
 });
 
@@ -1234,6 +1237,7 @@ test('youtube notes --save refuses thin notes and writes no brief', async () => 
   assert.equal(output.includes(ephemeralApplyMessage('notes')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-thin01.md')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-thin01.apply.md')), false);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-thin01.apply.md')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'logs')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments')), false);
 });
@@ -1250,7 +1254,8 @@ test('youtube unsave removes filed brief apply and notes pack', async () => {
   });
   assert.equal(saveStatus, 0);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-gone01.md')), true);
-  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-gone01.apply.md')), true);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-gone01.apply.md')), true);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-gone01.apply.md')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'notes-gone01', 'measure.py')), true);
 
   const output = [];
@@ -1263,13 +1268,13 @@ test('youtube unsave removes filed brief apply and notes pack', async () => {
   });
 
   assert.equal(status, 0);
-  assert.match(output.join('\n'), /removed atris\/wiki\/briefs\/youtube-gone01\.md and atris\/wiki\/briefs\/youtube-gone01\.apply\.md and atris\/experiments\/notes-gone01/);
+  assert.match(output.join('\n'), /removed atris\/wiki\/briefs\/youtube-gone01\.md and atris\/wiki\/briefs\/notes-gone01\.apply\.md and atris\/experiments\/notes-gone01/);
   assert.deepEqual(
     output.filter((line) => String(line).startsWith('next:')),
     ['next: atris youtube search " "'],
   );
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-gone01.md')), false);
-  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-gone01.apply.md')), false);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-gone01.apply.md')), false);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'experiments', 'notes-gone01')), false);
 });
 
@@ -1467,6 +1472,51 @@ test('youtube process with a stub-only apply refuses without rewriting it', asyn
   assert.equal(output.includes(PROCESS_APPLY_MESSAGE), true);
   assert.equal(fs.readFileSync(applyPath, 'utf8'), stub);
   assert.equal(fs.existsSync(path.join(cwd, 'atris', 'logs')), false);
+});
+
+test('youtube process still needs a human apply after notes --save', async () => {
+  const url = 'https://www.youtube.com/watch?v=notegate';
+  const { cwd, workDir } = notesApplyWorkspace('notegate', RICH_NOTES);
+  const notesOut = [];
+  const saveStatus = await youtubeCommand(['notes', url, '--save'], {
+    cwd,
+    workDir,
+    now: '2026-08-26',
+    output: (line) => notesOut.push(line),
+    runner: () => ({ status: 0 }),
+  });
+  assert.equal(saveStatus, 0, notesOut.join('\n'));
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-notegate.apply.md')), true);
+  assert.equal(fs.existsSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-notegate.apply.md')), false);
+
+  const output = [];
+  let apiCalls = 0;
+  let authCalls = 0;
+  const status = await youtubeCommand(['process', url], {
+    cwd,
+    now: '2026-08-26',
+    output: (line) => output.push(line),
+    ensureValidCredentials: async () => {
+      authCalls += 1;
+      return { credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } };
+    },
+    extractLocalTranscript: async () => null,
+    apiRequestJson: async () => {
+      apiCalls += 1;
+      return stubRichProcess();
+    },
+  });
+
+  assert.equal(status, 2);
+  assert.equal(apiCalls, 0);
+  assert.equal(authCalls, 0);
+  assert.equal(output.includes(PROCESS_APPLY_MESSAGE), true);
+  const stub = fs.readFileSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'youtube-notegate.apply.md'), 'utf8');
+  assert.match(stub, /^change: fill this$/m);
+  assert.match(stub, /^receipt: fill this$/m);
+  const notesSidecar = fs.readFileSync(path.join(cwd, 'atris', 'wiki', 'briefs', 'notes-notegate.apply.md'), 'utf8');
+  assert.match(notesSidecar, /^change: apply atris\/experiments\/notes-notegate$/m);
+  assert.doesNotMatch(notesSidecar, /fill this/i);
 });
 
 test('youtube process mints only the youtube scope after an expired user wall and retries', async () => {
