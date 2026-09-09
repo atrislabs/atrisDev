@@ -99,6 +99,7 @@ test('parseFlatPlaylist reads id|title rows and skips junk', () => {
     'aaa|Newest video',
     '',
     'NA|skip',
+    'None|not a video id',
     'WARNING: [youtube] Incomplete data | retrying',
     'ERROR: [youtube] foo | HTTP Error 429',
     'bbb|Older video',
