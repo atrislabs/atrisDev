@@ -3897,7 +3897,6 @@ module.exports = {
   TEACH_WATCH_TICK_NEXT,
   teachExperimentSlug,
   notesExperimentSlug,
-  notesApplyRel,
   digestExperimentSlug,
   watchExperimentSlug,
   processExperimentSlug,
