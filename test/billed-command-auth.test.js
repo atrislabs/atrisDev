@@ -301,7 +301,8 @@ test('atris x-search mints an x-search token from the stored JWT and retries', a
     assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, /Choose login method|Opening browser|\/auth\/cli/);
 
     const stored = readCredentials(home);
-    assert.equal(stored.token, SECRET);
+    assert.equal(stored.token, 'stored-user-jwt');
+    assert.equal(stored.agent_token, SECRET);
     assert.equal(stored.refresh_token, 'stored-refresh-jwt');
     assert.equal(stored.email, 'owner@example.com');
   } finally {
@@ -382,7 +383,8 @@ test('atris youtube search --paid mints a youtube token from the stored JWT and 
     assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, /Choose login method|Opening browser|\/auth\/cli/);
 
     const stored = readCredentials(home);
-    assert.equal(stored.token, SECRET);
+    assert.equal(stored.token, 'stored-user-jwt');
+    assert.equal(stored.agent_token, SECRET);
     assert.equal(stored.refresh_token, 'stored-refresh-jwt');
     assert.equal(stored.email, 'owner@example.com');
   } finally {
@@ -465,7 +467,8 @@ test('atris youtube process mints a youtube token from the stored JWT and retrie
     assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, /Choose login method|Opening browser|\/auth\/cli/);
 
     const stored = readCredentials(home);
-    assert.equal(stored.token, SECRET);
+    assert.equal(stored.token, 'stored-user-jwt');
+    assert.equal(stored.agent_token, SECRET);
     assert.equal(stored.refresh_token, 'stored-refresh-jwt');
   } finally {
     await closeServer(mock.server);

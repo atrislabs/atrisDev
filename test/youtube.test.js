@@ -176,7 +176,7 @@ test('youtubeCommand calls the process_youtube endpoint without curl', async () 
   ], {
     cwd,
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => {
       extractorCalls += 1;
       return null;
@@ -229,7 +229,7 @@ test('youtubeCommand sends local transcript first without caching it', async () 
   ], {
     cwd,
     output: () => {},
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => ({
       transcriptText: 'local captions',
       language: 'en',
@@ -263,7 +263,7 @@ test('youtubeCommand falls back to cloud video after local transcript failure', 
   ], {
     cwd,
     output: () => {},
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => ({
       transcriptText: 'local captions',
       language: 'en',
@@ -1413,7 +1413,7 @@ test('youtube process without apply exits 2 and never calls the api', async () =
     output: (line) => output.push(line),
     ensureValidCredentials: async () => {
       authCalls += 1;
-      return { credentials: { token: 'token-123' } };
+      return { credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } };
     },
     extractLocalTranscript: async () => {
       extractCalls += 1;
@@ -1454,7 +1454,7 @@ test('youtube process with a stub-only apply refuses without rewriting it', asyn
     cwd,
     now: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => null,
     apiRequestJson: async () => {
       apiCalls += 1;
@@ -1539,7 +1539,7 @@ async function runProcessRemint(firstData, retryData, extraArgs = []) {
   const status = await youtubeCommand(['process', url, ...extraArgs], {
     cwd,
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'user-jwt' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'user-jwt', agent_token: 'user-jwt', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     loadCredentials: () => ({ token: 'user-jwt', refresh_token: 'refresh-jwt' }),
     persistMintedAgentToken: () => {},
     extractLocalTranscript: async () => null,
@@ -1665,7 +1665,8 @@ async function runProcessFailure(result) {
   const status = await youtubeCommand(['process', url], {
     cwd,
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
+    loadCredentials: () => null,
     extractLocalTranscript: async () => null,
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
@@ -1786,7 +1787,7 @@ async function runLocalTranscriptProcessRetry(firstResult, secondResult, extraAr
   const status = await youtubeCommand(['process', url, ...extraArgs], {
     cwd,
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => ({
       transcriptText: 'local captions',
       language: 'en',
@@ -1941,7 +1942,7 @@ test('youtube process prints keep next and score 0 after a rich analysis', async
     cwd,
     now: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => null,
     apiRequestJson: async () => stubRichProcess(),
   });
@@ -1976,7 +1977,7 @@ test('youtube process --json stays quiet on the learner check', async () => {
   const status = await youtubeCommand(['process', url, '--json'], {
     cwd,
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => null,
     apiRequestJson: async () => ({
       ok: true,
@@ -2008,7 +2009,7 @@ test('youtube process without apply prints no learner check', async () => {
     cwd,
     now: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => null,
     apiRequestJson: async () => ({ ok: true, status: 200, data: {} }),
   });
@@ -2030,7 +2031,7 @@ test('rich youtube process mints a measure.py that validate.py accepts and score
     cwd,
     now: '2026-08-26',
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => null,
     apiRequestJson: async () => stubRichProcess(),
   });
@@ -2099,7 +2100,7 @@ test('youtube unsave after rich process removes the minted pack', async () => {
     cwd,
     now: '2026-08-26',
     output: () => {},
-    ensureValidCredentials: async () => ({ credentials: { token: 'token-123' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 'token-123', agent_token: 'token-123', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => null,
     apiRequestJson: async () => stubRichProcess(),
   });
@@ -2177,7 +2178,7 @@ async function runProcessSuccess(id, data, extraArgs = []) {
   const status = await youtubeCommand(['process', url, ...extraArgs], {
     cwd,
     output: (line) => output.push(line),
-    ensureValidCredentials: async () => ({ credentials: { token: 't' } }),
+    ensureValidCredentials: async () => ({ credentials: { token: 't', agent_token: 't', agent_token_scopes: ['x-search', 'youtube'], agent_token_expires_at: '2099-01-01T00:00:00Z' } }),
     extractLocalTranscript: async () => null,
     apiRequestJson: async (pathname, options) => {
       calls.push({ pathname, options });
