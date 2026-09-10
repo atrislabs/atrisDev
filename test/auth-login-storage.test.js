@@ -122,6 +122,58 @@ test('billed auth uses a login-field scoped token when the scope matches', async
   assert.equal(minted, 0);
 });
 
+test('billed auth uses leftover placed-file scopes when they match', async () => {
+  let minted = 0;
+  const leftover = {
+    token: 'fresh-placed-token',
+    expires_at: new Date(Date.now() + 60_000).toISOString(),
+    scopes: ['youtube'],
+    provider: null,
+    source: 'agent_token_file',
+  };
+  const result = await ensureBilledCommandAuth('youtube', {
+    loadCredentials: () => leftover,
+    mintScopedAgentToken: async () => {
+      minted += 1;
+      return { ok: true, token: 'new-agent' };
+    },
+    apiRequestJson: async () => {
+      throw new Error('placed leftover must not remint');
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.minted, false);
+  assert.equal(result.token, leftover.token);
+  assert.equal(minted, 0);
+});
+
+test('billed auth does not remint youtube from an x-search-only placed leftover', async () => {
+  let minted = 0;
+  const leftover = {
+    token: 'fresh-placed-token',
+    expires_at: new Date(Date.now() + 60_000).toISOString(),
+    scopes: ['x-search'],
+    provider: null,
+    source: 'agent_token_file',
+  };
+  const result = await ensureBilledCommandAuth('youtube', {
+    loadCredentials: () => leftover,
+    persistMintedAgentToken: () => {
+      throw new Error('should not persist');
+    },
+    mintScopedAgentToken: async () => {
+      minted += 1;
+      return { ok: true, token: 'new-agent' };
+    },
+    apiRequestJson: async () => {
+      throw new Error('placed leftover must not remint');
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'not signed in. run atris login first.');
+  assert.equal(minted, 0);
+});
+
 test('billed auth does not remint from a login-field scoped token for another scope', async () => {
   let minted = 0;
   const result = await ensureBilledCommandAuth('x-search', {

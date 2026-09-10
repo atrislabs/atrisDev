@@ -102,6 +102,7 @@ function scopedTokenCandidate(credentials = {}) {
 }
 
 function canMintFromLogin(credentials = {}) {
+  if (credentials.source === 'agent_token_file') return false;
   const login = firstNonEmptyString(credentials.token);
   const refresh = firstNonEmptyString(credentials.refresh_token);
   if (isAgentAccessToken(login) && !refresh) return false;
@@ -227,8 +228,10 @@ async function ensureBilledCommandAuth(scope, deps = {}) {
   const credentials = ensured?.credentials || await load(api) || {};
   const candidate = scopedTokenCandidate(credentials);
   const claims = decodeJwtClaims(candidate);
-  const scopes = claims?.scopes || credentials.agent_token_scopes || [];
-  const expiry = claims?.exp ? claims.exp * 1000 : Date.parse(credentials.agent_token_expires_at);
+  const scopes = claims?.scopes || credentials.agent_token_scopes || credentials.scopes || [];
+  const expiry = claims?.exp
+    ? claims.exp * 1000
+    : Date.parse(credentials.agent_token_expires_at || credentials.expires_at);
   if (!deps.forceMint && candidate && Array.isArray(scopes) && scopes.includes(wanted) && Number.isFinite(expiry) && expiry > Date.now()) {
     return { ok: true, token: candidate, minted: false, credentials };
   }
