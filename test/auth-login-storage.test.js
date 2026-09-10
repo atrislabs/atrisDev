@@ -147,6 +147,70 @@ test('billed auth uses leftover placed-file scopes when they match', async () =>
   assert.equal(minted, 0);
 });
 
+test('billed auth uses leftover placed-file scopes when env repeats that leftover', async t => {
+  const { file } = sandbox(t);
+  fs.writeFileSync(file, JSON.stringify({ token: 'session' }));
+  const tokenFile = path.join(path.dirname(file), 'agent-token.json');
+  const leftover = 'fresh-placed-token';
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  fs.writeFileSync(tokenFile, JSON.stringify({
+    token: leftover,
+    expires_at: expiresAt,
+    scopes: ['youtube'],
+  }));
+  process.env.ATRIS_TOKEN = leftover;
+  process.env.ATRIS_AGENT_TOKEN_FILE = tokenFile;
+
+  let minted = 0;
+  const result = await ensureBilledCommandAuth('youtube', {
+    mintScopedAgentToken: async () => {
+      minted += 1;
+      return { ok: true, token: 'new-agent' };
+    },
+    persistMintedAgentToken: () => {
+      throw new Error('should not persist');
+    },
+    apiRequestJson: async () => {
+      throw new Error('env-repeated placed leftover must not remint');
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.minted, false);
+  assert.equal(result.token, leftover);
+  assert.equal(minted, 0);
+});
+
+test('billed auth does not remint youtube from an env-repeated x-search-only placed leftover', async t => {
+  const { file } = sandbox(t);
+  fs.writeFileSync(file, JSON.stringify({ token: 'session' }));
+  const tokenFile = path.join(path.dirname(file), 'agent-token.json');
+  const leftover = 'fresh-placed-token';
+  fs.writeFileSync(tokenFile, JSON.stringify({
+    token: leftover,
+    expires_at: new Date(Date.now() + 60_000).toISOString(),
+    scopes: ['x-search'],
+  }));
+  process.env.ATRIS_TOKEN = leftover;
+  process.env.ATRIS_AGENT_TOKEN_FILE = tokenFile;
+
+  let minted = 0;
+  const result = await ensureBilledCommandAuth('youtube', {
+    persistMintedAgentToken: () => {
+      throw new Error('should not persist');
+    },
+    mintScopedAgentToken: async () => {
+      minted += 1;
+      return { ok: true, token: 'new-agent' };
+    },
+    apiRequestJson: async () => {
+      throw new Error('env-repeated placed leftover must not remint');
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'not signed in. run atris login first.');
+  assert.equal(minted, 0);
+});
+
 test('billed auth does not remint youtube from an x-search-only placed leftover', async () => {
   let minted = 0;
   const leftover = {
