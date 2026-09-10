@@ -103,6 +103,9 @@ function scopedTokenCandidate(credentials = {}) {
 
 function canMintFromLogin(credentials = {}) {
   if (credentials.source === 'agent_token_file') return false;
+  if (credentials.source === 'env' && Array.isArray(credentials.scopes) && credentials.scopes.length) {
+    return false;
+  }
   const login = firstNonEmptyString(credentials.token);
   const refresh = firstNonEmptyString(credentials.refresh_token);
   if (isAgentAccessToken(login) && !refresh) return false;
