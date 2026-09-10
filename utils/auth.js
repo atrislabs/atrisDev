@@ -202,28 +202,49 @@ function loadPlacedAgentToken() {
   }
 }
 
+function leftoverStoredAgentToken(parsed, envToken) {
+  if (!parsed || !envToken) return null;
+  const leftover = typeof parsed.agent_token === 'string' ? parsed.agent_token.trim() : '';
+  if (!leftover || leftover !== envToken) return null;
+  const expiresAt = parsed.agent_token_expires_at;
+  if (expiryTimeMs(expiresAt) === null) return null;
+  const scopes = Array.isArray(parsed.agent_token_scopes) ? parsed.agent_token_scopes : [];
+  return {
+    token: leftover,
+    expires_at: expiresAt,
+    scopes,
+    provider: null,
+    source: 'env',
+    agent_token: leftover,
+    agent_token_scopes: scopes,
+    agent_token_expires_at: expiresAt,
+  };
+}
+
 function loadLeftoverCredentialsAgentToken(envToken) {
   if (!envToken) return null;
   try {
-    const parsed = JSON.parse(fs.readFileSync(getCredentialsPath(), 'utf8'));
-    const leftover = typeof parsed?.agent_token === 'string' ? parsed.agent_token.trim() : '';
-    if (!leftover || leftover !== envToken) return null;
-    const expiresAt = parsed.agent_token_expires_at;
-    if (expiryTimeMs(expiresAt) === null) return null;
-    const scopes = Array.isArray(parsed.agent_token_scopes) ? parsed.agent_token_scopes : [];
-    return {
-      token: leftover,
-      expires_at: expiresAt,
-      scopes,
-      provider: null,
-      source: 'env',
-      agent_token: leftover,
-      agent_token_scopes: scopes,
-      agent_token_expires_at: expiresAt,
-    };
+    return leftoverStoredAgentToken(JSON.parse(fs.readFileSync(getCredentialsPath(), 'utf8')), envToken);
   } catch {
     return null;
   }
+}
+
+function resolveProfileOverride(profileOverride) {
+  if (!profileOverride) return null;
+  if (loadProfile(profileOverride)) return profileOverride;
+  const profiles = listProfiles();
+  const q = String(profileOverride).toLowerCase();
+  return profiles.find((name) => name.toLowerCase() === q)
+    || profiles.find((name) => name.toLowerCase().startsWith(q))
+    || profiles.find((name) => name.toLowerCase().includes(q))
+    || null;
+}
+
+function loadLeftoverProfileAgentToken(envToken) {
+  const name = resolveProfileOverride(process.env.ATRIS_PROFILE);
+  if (!envToken || !name) return null;
+  return leftoverStoredAgentToken(loadProfile(name), envToken);
 }
 
 function isUnexpiredCredential(credentials) {
@@ -461,6 +482,12 @@ function readCredentials() {
       // Env repeating leftover credentials.agent_token keeps leftover scopes
       // and expiry so billed auth does not remint.
       return leftoverCredentials;
+    }
+    const leftoverProfile = loadLeftoverProfileAgentToken(normalizedEnvToken);
+    if (leftoverProfile && isUnexpiredCredential(leftoverProfile)) {
+      // Env repeating leftover profile agent_token keeps leftover scopes
+      // and expiry so billed auth does not remint.
+      return leftoverProfile;
     }
     return { token: normalizedEnvToken, provider: null, source: 'env' };
   }

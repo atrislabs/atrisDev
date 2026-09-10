@@ -29,6 +29,12 @@ function writeCredentials(home, creds) {
   fs.writeFileSync(path.join(dir, 'credentials.json'), JSON.stringify(creds, null, 2));
 }
 
+function writeProfile(home, name, creds) {
+  const dir = path.join(home, '.atris', 'profiles');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(creds, null, 2));
+}
+
 function writePlacedToken(dir, value) {
   const file = path.join(dir, 'agent-token.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -789,6 +795,104 @@ test('atris youtube process uses a leftover youtube credentials token even when 
     assert.equal(processCall.authorization, `Bearer ${leftover}`);
     assert.match(res.stdout, /env-repeated credentials leftover youtube worked/);
     assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, /Refusing to save a scoped agent token/);
+  } finally {
+    await closeServer(mock.server);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('atris youtube process uses a leftover youtube profile token even when env repeats it', async () => {
+  const dir = makeTempDir();
+  const home = path.join(dir, 'home');
+  const leftover = 'fresh-profile-youtube-token';
+  writeProfile(home, 'owner', {
+    token: 'stored-user-jwt',
+    agent_token: leftover,
+    agent_token_scopes: ['youtube'],
+    agent_token_expires_at: new Date(Date.now() + 60_000).toISOString(),
+    provider: 'atris',
+  });
+  writeProcessApply(dir);
+
+  const mock = await startHttpMock((request) => {
+    if (request.url === '/api/auth/validate') {
+      return { status: 401, body: { error: 'profile leftover is not a user jwt' } };
+    }
+    if (request.url === '/api/auth/agent-token') {
+      return { status: 500, body: { error: 'env-repeated profile leftover must not remint' } };
+    }
+    if (request.url === '/api/agent/process_youtube') {
+      assert.equal(request.authorization, `Bearer ${leftover}`);
+      return {
+        status: 200,
+        body: {
+          status: 'success',
+          message: 'ok',
+          video_analysis: 'env-repeated profile leftover youtube worked',
+          credits_used: 5,
+          credits_remaining: 40,
+        },
+      };
+    }
+    return { status: 404, body: { error: `unexpected ${request.url}` } };
+  });
+
+  try {
+    const res = await runCliAsync(['youtube', 'process', 'https://youtu.be/abc123'], {
+      cwd: dir,
+      env: {
+        HOME: home,
+        ATRIS_TOKEN: leftover,
+        ATRIS_PROFILE: 'owner',
+        ATRIS_API_URL: `http://127.0.0.1:${mock.port}/api`,
+      },
+    });
+    assert.equal(res.status, 0, `${res.stdout}\n${res.stderr}`);
+    assert.equal(mock.requests.some((req) => req.url === '/api/auth/agent-token'), false);
+    const processCall = mock.requests.find((req) => req.url === '/api/agent/process_youtube');
+    assert.ok(processCall, 'expected youtube process');
+    assert.equal(processCall.authorization, `Bearer ${leftover}`);
+    assert.match(res.stdout, /env-repeated profile leftover youtube worked/);
+    assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, /Refusing to save a scoped agent token/);
+  } finally {
+    await closeServer(mock.server);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('atris youtube process with an env-repeated x-search-only profile leftover stays off remint and the paid pull', async () => {
+  const dir = makeTempDir();
+  const home = path.join(dir, 'home');
+  const leftover = 'fresh-profile-x-search-token';
+  writeProfile(home, 'owner', {
+    token: 'stored-user-jwt',
+    agent_token: leftover,
+    agent_token_scopes: ['x-search'],
+    agent_token_expires_at: new Date(Date.now() + 60_000).toISOString(),
+    provider: 'atris',
+  });
+  writeProcessApply(dir);
+
+  const mock = await startHttpMock((request) => {
+    return { status: 500, body: { error: `unexpected ${request.url}` } };
+  });
+
+  try {
+    const res = await runCliAsync(['youtube', 'process', 'https://youtu.be/abc123'], {
+      cwd: dir,
+      env: {
+        HOME: home,
+        ATRIS_TOKEN: leftover,
+        ATRIS_PROFILE: 'owner',
+        ATRIS_API_URL: `http://127.0.0.1:${mock.port}/api`,
+      },
+    });
+    assert.equal(res.status, 1, `${res.stdout}\n${res.stderr}`);
+    const text = `${res.stdout}\n${res.stderr}`;
+    assert.match(text, /not signed in\. run atris login first\./);
+    assert.doesNotMatch(text, /Refusing to save a scoped agent token/);
+    assert.equal(mock.requests.some((req) => req.url === '/api/auth/agent-token'), false);
+    assert.equal(mock.requests.some((req) => req.url === '/api/agent/process_youtube'), false);
   } finally {
     await closeServer(mock.server);
     fs.rmSync(dir, { recursive: true, force: true });
