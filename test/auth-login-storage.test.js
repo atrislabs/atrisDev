@@ -211,6 +211,66 @@ test('billed auth does not remint youtube from an env-repeated x-search-only pla
   assert.equal(minted, 0);
 });
 
+test('billed auth uses leftover credentials agent_token scopes when env repeats that leftover', async t => {
+  const { file } = sandbox(t);
+  const leftover = 'fresh-credentials-agent-token';
+  const expiresAt = new Date(Date.now() + 60_000).toISOString();
+  fs.writeFileSync(file, JSON.stringify({
+    token: 'stored-user-jwt',
+    agent_token: leftover,
+    agent_token_scopes: ['youtube'],
+    agent_token_expires_at: expiresAt,
+  }));
+  process.env.ATRIS_TOKEN = leftover;
+
+  let minted = 0;
+  const result = await ensureBilledCommandAuth('youtube', {
+    mintScopedAgentToken: async () => {
+      minted += 1;
+      return { ok: true, token: 'new-agent' };
+    },
+    persistMintedAgentToken: () => {
+      throw new Error('should not persist');
+    },
+    apiRequestJson: async () => {
+      throw new Error('env-repeated credentials leftover must not remint');
+    },
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.minted, false);
+  assert.equal(result.token, leftover);
+  assert.equal(minted, 0);
+});
+
+test('billed auth does not remint youtube from an env-repeated x-search-only credentials leftover', async t => {
+  const { file } = sandbox(t);
+  const leftover = 'fresh-credentials-agent-token';
+  fs.writeFileSync(file, JSON.stringify({
+    token: 'stored-user-jwt',
+    agent_token: leftover,
+    agent_token_scopes: ['x-search'],
+    agent_token_expires_at: new Date(Date.now() + 60_000).toISOString(),
+  }));
+  process.env.ATRIS_TOKEN = leftover;
+
+  let minted = 0;
+  const result = await ensureBilledCommandAuth('youtube', {
+    persistMintedAgentToken: () => {
+      throw new Error('should not persist');
+    },
+    mintScopedAgentToken: async () => {
+      minted += 1;
+      return { ok: true, token: 'new-agent' };
+    },
+    apiRequestJson: async () => {
+      throw new Error('env-repeated credentials leftover must not remint');
+    },
+  });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'not signed in. run atris login first.');
+  assert.equal(minted, 0);
+});
+
 test('billed auth does not remint youtube from an x-search-only placed leftover', async () => {
   let minted = 0;
   const leftover = {

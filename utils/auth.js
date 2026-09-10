@@ -202,6 +202,30 @@ function loadPlacedAgentToken() {
   }
 }
 
+function loadLeftoverCredentialsAgentToken(envToken) {
+  if (!envToken) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(getCredentialsPath(), 'utf8'));
+    const leftover = typeof parsed?.agent_token === 'string' ? parsed.agent_token.trim() : '';
+    if (!leftover || leftover !== envToken) return null;
+    const expiresAt = parsed.agent_token_expires_at;
+    if (expiryTimeMs(expiresAt) === null) return null;
+    const scopes = Array.isArray(parsed.agent_token_scopes) ? parsed.agent_token_scopes : [];
+    return {
+      token: leftover,
+      expires_at: expiresAt,
+      scopes,
+      provider: null,
+      source: 'env',
+      agent_token: leftover,
+      agent_token_scopes: scopes,
+      agent_token_expires_at: expiresAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function isUnexpiredCredential(credentials) {
   const expiresAt = expiryTimeMs(credentials?.expires_at);
   return expiresAt !== null && expiresAt > Date.now();
@@ -432,6 +456,12 @@ function readCredentials() {
     return placedAgentToken;
   }
   if (normalizedEnvToken) {
+    const leftoverCredentials = loadLeftoverCredentialsAgentToken(normalizedEnvToken);
+    if (leftoverCredentials && isUnexpiredCredential(leftoverCredentials)) {
+      // Env repeating leftover credentials.agent_token keeps leftover scopes
+      // and expiry so billed auth does not remint.
+      return leftoverCredentials;
+    }
     return { token: normalizedEnvToken, provider: null, source: 'env' };
   }
 
