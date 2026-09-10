@@ -641,6 +641,102 @@ test('atris youtube process uses a leftover youtube placed token and does not re
   }
 });
 
+test('atris youtube process uses a leftover youtube placed token even when env repeats it', async () => {
+  const dir = makeTempDir();
+  const home = path.join(dir, 'home');
+  fs.mkdirSync(home, { recursive: true });
+  const placedToken = 'fresh-placed-youtube-token';
+  const tokenFile = writePlacedToken(dir, {
+    token: placedToken,
+    expires_at: new Date(Date.now() + 60_000).toISOString(),
+    scopes: ['youtube'],
+  });
+  writeProcessApply(dir);
+
+  const mock = await startHttpMock((request) => {
+    if (request.url === '/api/auth/validate') {
+      return { status: 401, body: { error: 'placed leftover is not a user jwt' } };
+    }
+    if (request.url === '/api/auth/agent-token') {
+      return { status: 500, body: { error: 'env-repeated placed leftover must not remint' } };
+    }
+    if (request.url === '/api/agent/process_youtube') {
+      assert.equal(request.authorization, `Bearer ${placedToken}`);
+      return {
+        status: 200,
+        body: {
+          status: 'success',
+          message: 'ok',
+          video_analysis: 'env-repeated placed leftover youtube worked',
+          credits_used: 5,
+          credits_remaining: 40,
+        },
+      };
+    }
+    return { status: 404, body: { error: `unexpected ${request.url}` } };
+  });
+
+  try {
+    const res = await runCliAsync(['youtube', 'process', 'https://youtu.be/abc123'], {
+      cwd: dir,
+      env: {
+        HOME: home,
+        ATRIS_TOKEN: placedToken,
+        ATRIS_AGENT_TOKEN_FILE: tokenFile,
+        ATRIS_API_URL: `http://127.0.0.1:${mock.port}/api`,
+      },
+    });
+    assert.equal(res.status, 0, `${res.stdout}\n${res.stderr}`);
+    assert.equal(mock.requests.some((req) => req.url === '/api/auth/agent-token'), false);
+    const processCall = mock.requests.find((req) => req.url === '/api/agent/process_youtube');
+    assert.ok(processCall, 'expected youtube process');
+    assert.equal(processCall.authorization, `Bearer ${placedToken}`);
+    assert.match(res.stdout, /env-repeated placed leftover youtube worked/);
+    assert.doesNotMatch(`${res.stdout}\n${res.stderr}`, /Refusing to save a scoped agent token/);
+  } finally {
+    await closeServer(mock.server);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('atris youtube process with an env-repeated x-search-only placed leftover stays off remint and the paid pull', async () => {
+  const dir = makeTempDir();
+  const home = path.join(dir, 'home');
+  fs.mkdirSync(home, { recursive: true });
+  const placedToken = 'fresh-placed-x-search-token';
+  const tokenFile = writePlacedToken(dir, {
+    token: placedToken,
+    expires_at: new Date(Date.now() + 60_000).toISOString(),
+    scopes: ['x-search'],
+  });
+  writeProcessApply(dir);
+
+  const mock = await startHttpMock((request) => {
+    return { status: 500, body: { error: `unexpected ${request.url}` } };
+  });
+
+  try {
+    const res = await runCliAsync(['youtube', 'process', 'https://youtu.be/abc123'], {
+      cwd: dir,
+      env: {
+        HOME: home,
+        ATRIS_TOKEN: placedToken,
+        ATRIS_AGENT_TOKEN_FILE: tokenFile,
+        ATRIS_API_URL: `http://127.0.0.1:${mock.port}/api`,
+      },
+    });
+    assert.equal(res.status, 1, `${res.stdout}\n${res.stderr}`);
+    const text = `${res.stdout}\n${res.stderr}`;
+    assert.match(text, /not signed in\. run atris login first\./);
+    assert.doesNotMatch(text, /Refusing to save a scoped agent token/);
+    assert.equal(mock.requests.some((req) => req.url === '/api/auth/agent-token'), false);
+    assert.equal(mock.requests.some((req) => req.url === '/api/agent/process_youtube'), false);
+  } finally {
+    await closeServer(mock.server);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('atris youtube process with an x-search-only placed leftover stays off remint and the paid pull', async () => {
   const dir = makeTempDir();
   const home = path.join(dir, 'home');

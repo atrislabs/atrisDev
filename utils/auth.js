@@ -417,7 +417,8 @@ async function repairLoginCredentials(credentials, apiRequestJson) {
 function readCredentials() {
   // Priority: ATRIS_TOKEN env var → placed agent token → ATRIS_PROFILE env var
   // → per-terminal session file → global credentials.json. A fresh placed token
-  // overrides a different env token because cloud images can carry a stale one.
+  // overrides env when the leftover is newer or when env only repeats that
+  // leftover, so billed auth still sees leftover scopes.
 
   // 0. Raw token injection. Headless boxes (cloud business computers) have no
   //    browser for `atris login`; the runner injects a scoped token as env
@@ -425,12 +426,9 @@ function readCredentials() {
   const envToken = process.env.ATRIS_TOKEN;
   const normalizedEnvToken = envToken && envToken.trim();
   const placedAgentToken = loadPlacedAgentToken();
-  if (
-    normalizedEnvToken &&
-    placedAgentToken &&
-    placedAgentToken.token !== normalizedEnvToken &&
-    isUnexpiredCredential(placedAgentToken)
-  ) {
+  if (normalizedEnvToken && placedAgentToken && isUnexpiredCredential(placedAgentToken)) {
+    // Fresh placed leftover wins over env, including when env repeats the same
+    // token, so billed auth still sees leftover scopes and does not remint.
     return placedAgentToken;
   }
   if (normalizedEnvToken) {

@@ -65,8 +65,10 @@ test('fresh placed token wins over a different stale environment token', () => {
       process.env.ATRIS_TOKEN = 'fresh-placed-token';
       assert.deepEqual(loadCredentials(), {
         token: 'fresh-placed-token',
+        expires_at: expiresAt,
+        scopes: ['x-search'],
         provider: null,
-        source: 'env',
+        source: 'agent_token_file',
       });
     });
   } finally {
